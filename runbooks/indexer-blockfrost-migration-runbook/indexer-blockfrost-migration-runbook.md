@@ -53,7 +53,9 @@ and onto Blockfrost is mostly a URL swap plus a `project_id` token. There are tw
 
 Use this runbook to do the migration, recognise both failures, and pick a remediation.
 
-_Compiled 2026-09-29 from a preprod migration of the `midnight-examples` hello-world suite
+_Compiled 2026-09-29 from a preprod migration of the `midnight-examples` hello-world suite,
+and extended 2026-09-30 from migrating the whole repo (10 suites, the preseed cutter and
+the wallet minter) and running it against preprod node 1.0.400
 (`@midnight-ntwrk/wallet-sdk` 1.2.0, `@midnight-ntwrk/ledger-v8` 8.1.2, midnight-js and testkit-js 4.1.1).
 Event ids, offsets and schema fields are point-in-time. Re-run the diagnostic before
 asserting any of them. The Midnight ecosystem changes fast._
@@ -105,7 +107,25 @@ Each sub-wallet logs one `Wallet.Sync: [object Object]` (`_tag: 'Wallet.Sync'`) 
 then resubscribes from its cursor with exponential backoff (1 s doubling, capped at 2 min)
 and carries on. In a 67-minute sync this happened three times: once each for the
 unshielded, shielded and dust subscriptions, including the dust one mid-stream. Every
-resume was clean. No action is needed unless the error repeats without progress.
+resume was clean. No action is needed unless the error repeats without progress. How
+often it happens varies. On 2026-09-30 the drops tracked CPU load in the process, not idle
+time:
+- A 67-minute genesis cut logged no drops. Neither did any single-wallet suite (6–8 min
+  each).
+- Multi-wallet suites logged 3 drops (one per sub-wallet, `Wallet.Sync: [object CloseEvent]`)
+  each time another wallet was restored from a preseed bundle while an earlier wallet was
+  live: battleship 3, silent-auction 6, shielded-chips 9, private-party 9–12.
+
+The inferred cause (unconfirmed) is that `dust.restore()` deserializes ~12.7 MB in WASM on
+the same thread, the event loop stalls for about 2 min, and the live wallet's sockets are
+closed.
+
+Seen once on 2026-09-30, possibly related: the **first transaction right after such a
+restore** was rejected with `1010: Invalid Transaction: Custom error: 170`
+(`InvalidDustSpendProof`). A second transaction from the same wallet 28 s later passed, and
+the suite passed on re-run. Inferred, not confirmed: the earlier wallet's dust tree lagged
+tip after the stall, so its fee proof used a stale root. Re-sync a wallet after restoring
+others in the same process, before it transacts.
 
 ## Root cause
 
@@ -201,6 +221,9 @@ request, and the SDK needs a real `wss://` node URL.
   no change.
 - **Divergence point.** Ledger events: official ids 989781–989802, offset −22 thereafter
   (at compile date). Transactions: −30 at official tx id 632821 (single sample).
+  Re-checked 2026-09-30 near tip (height ~2779585) with `check-indexer-cursor.mjs`: still
+  −22 for both streams (official zswap 1575204 = Blockfrost 1575182, dust 1575271 = 1575249;
+  zswap 1576386 = 1576364, dust 1576656 = 1576634).
 - **Error text.** `values inserted non-linearly into dust generation tree` (also seen as
   `… into zswap commitment tree` / `… into dust commitment tree` for other cursor/tree
   mismatches). For the progress lag: `Wallet sync timeout after 90000ms` from testkit
@@ -210,7 +233,13 @@ request, and the SDK needs a real `wss://` node URL.
   (from `midnight-indexer` `qa/tests/tests/e2e/subscription-polling.test.ts`).
 - **Full genesis sync on Blockfrost preprod:** 67 min 21 s (2026-09-29, wallet SDK 1.2.0,
   ~1.575M dust events at ~390 events/s; shielded and unshielded finish in the first minutes).
-  About the same as the official indexer's ~78 min.
+  About the same as the official indexer's ~78 min. A second sample, the `midnight-examples`
+  preseed cut `--from-genesis` on 2026-09-30, took 67 min 6 s: dust 0 → 1,576,656 at
+  ~392 events/s (steady between 350 and 410), bundle height 2779435.
+- **Official preprod indexer outage.** `indexer.preprod.midnight.network` answered HTTP 503
+  (nginx `503 Service Temporarily Unavailable`) on 2026-09-30 at about 17:20 and 17:40 UTC,
+  and 200 again from 17:48 UTC. The official node RPC answered throughout. While the
+  official indexer is down, [Diagnose](#diagnose) step 2 can't compare cursors.
 
 ## Diagnose
 
@@ -255,6 +284,20 @@ token in your environment, never on the command line or in a committed file.
    check itself failed; read its output. Defaults compare the official preprod indexer (A)
    to Blockfrost preprod (B); `--a-http --a-ws --b-http --b-ws --b-rpc` override them.
 
+   The check assumes the cursor came from A. For a bundle cut against Blockfrost it still
+   reports `NOT PORTABLE` with the −22 offset, which is correct: that bundle doesn't restore
+   on the official indexer either.
+
+   **Which indexer was a bundle cut against?** With `--manifest`, the script first prints the
+   indexer host the manifest records (`== 0. Manifest`). `midnight-examples` cutters write it
+   from 2026-09-30 (`"indexer": "midnight-preprod.blockfrost.io"`). This needs no query to A,
+   so it still works when the official indexer is down. For an older manifest with no
+   `indexer` field, steps 2–3 need A to be reachable. If A is down, compare the manifest's
+   cursors with the `maxId`s recorded in [Key identifiers](#key-identifiers). The
+   `midnight-examples` bundle at height 2768501 had dust cursor 1575271, which is the official
+   `maxId`; Blockfrost's was 1575249. That identified it as an official-indexer bundle, and
+   the script confirmed it once A was back.
+
 ## Remediation
 
 Most practical first. No funds are at risk in any of these: a stuck sync never submits
@@ -267,6 +310,17 @@ anything.
    - Leave no placeholder `nodeWS`.
    - Build the config when it's used, not at import time, and fail fast with a clear
      message when the token is missing.
+   - **Every URL now carries the token.** Any log line or error message that prints
+     `config.indexer` (or another endpoint) leaks it. `midnight-examples` had two ("Could
+     not read the chain tip from ${config.indexer}") and now passes URLs through
+     `redactUrl()`, which replaces `project_id=` values with `<redacted>`. Search the code
+     for URLs that get interpolated into logs or errors.
+   - Scripts that run outside the test runner don't load `.env.<network>` by themselves.
+     Plain `node`, `vite-node` and `tsx` don't; vitest loads it in `midnight-examples` only
+     through `loadEnv` in `vitest.config.ts`. Load the file into the environment first
+     (`set -a; . ./.env.preprod; set +a`) without printing it. Tools that rewrite the env
+     file drop the token: `midnight-examples` `yarn wallets:new --force` writes the file
+     from scratch, so re-add `BLOCKFROST_PROJECT_ID` afterwards.
 
    The shape used in `midnight-examples`:
 
@@ -290,7 +344,17 @@ anything.
 
    Move **every** consumer at once: app config, test harnesses, scaffold templates, and
    scripts that cut preseed bundles or mint wallets. A half-migrated repo mints cursors on
-   one indexer and replays them on the other.
+   one indexer and replays them on the other. Here is what that looked like in
+   `midnight-examples` (2026-09-30):
+   - hello-world had moved to Blockfrost.
+   - The other nine suites, the scaffold template, the preseed cutter and the wallet minter
+     (`packages/fast-sync/src/config.ts`) were still on the official indexer.
+   - The minter also reads each wallet's birthday tip from its configured indexer.
+   - The bundle committed alongside the hello-world move was an official-indexer bundle.
+     No Blockfrost wallet could have seeded from it.
+
+   The fix was one shared `preprodConfig()` in the harness package, which every consumer
+   imports.
 
 2. **Re-sync wallets from genesis on the new indexer.** Discard saved wallet state from the
    old indexer. Do **not** migrate `serializeState()` output. A fresh wallet created against
@@ -306,9 +370,14 @@ anything.
    only valid on the indexer that produced them. Cut with the cutter pointed at Blockfrost
    and **from genesis** (in `midnight-examples`: `yarn preseed:cut --from-genesis`).
    Bootstrapping the cutter from an official-indexer bundle fails with the same error.
-   Keep one bundle per indexer and record the indexer URL in the manifest. Wallet birthday
-   rules still apply: re-cutting means re-minting and re-funding wallets whose birthday
-   predates the new bundle.
+   Keep one bundle per indexer and record the indexer in the manifest. Record the **host**,
+   not the URL, because the URL carries the token. `midnight-examples` writes
+   `"indexer": "<host>"` from `cut-preseed.ts`, and `loadReferenceBundle` ignores the extra
+   field. Wallet birthday rules still apply: re-cutting means re-minting and re-funding
+   wallets whose birthday predates the new bundle. Measured 2026-09-30: the Blockfrost cut
+   took 67 min 6 s. Four wallets minted 5 blocks later (birthday 2779440 vs bundle 2779435)
+   seeded from it: the first sync emission started at the bundle cursor, and the wallet was
+   synced about 105 s after it started, mostly `restore()` of the ~12.7 MB dust state.
 
 4. **Pin cursor-bearing consumers to one indexer (interim).** If only part of the stack can
    move, keep wallet sync on the indexer its cursors came from. Reads keyed by contract
@@ -343,10 +412,15 @@ server-side proxy or a token scoped for public use.
 
 ## Reference material
 
-- Worked case: preprod migration of `midnightntwrk/midnight-examples` hello-world
-  (2026-09-29). Upstream tracking for the id gap: `midnightntwrk/servicedesk#216`. Relevant
-  files in that repo:
-  `examples/hello-world/src/config.ts` (the migrated config);
+- Worked case: preprod migration of `midnightntwrk/midnight-examples`, first hello-world
+  (2026-09-29), then every suite plus the preseed cutter and wallet minter (2026-09-30).
+  On Blockfrost, against preprod node `1.0.400-c338b9ac`, 9 of 10 suites passed. The tenth
+  failed one assertion that doesn't depend on the indexer (202 passed, 1 skipped, 1
+  failed); details are in that repo's `reports/node-1.0.400-regression.json`. The shared
+  config is in `packages/fast-sync/src/config.ts`. Upstream tracking for the id gap:
+  `midnightntwrk/servicedesk#216`. Relevant files in that repo:
+  `packages/fast-sync/src/config.ts` (the shared migrated config: `preprodConfig()`,
+  `redactUrl()`);
   `packages/fast-sync/src/funding.ts` (funding gate without testkit `waitForFunds`);
   `packages/fast-sync/src/fast-wallet.ts` (`new URL(env.nodeWS)` for relay and submission;
   seeds sub-wallets from a reference bundle); `packages/fast-sync/scripts/cut-preseed.ts`
@@ -370,10 +444,14 @@ server-side proxy or a token scoped for public use.
   - Why the official preprod indexer skips ids 989781–989802, and whether more skips should
     be expected (indexer team; `servicedesk#216`).
   - Blockfrost request quotas for a full genesis sync (preprod event ids run to ~1.58M).
+    On 2026-09-30 no request was rate-limited (no 429s) in a 67-min genesis cut plus
+    ~2 h 10 min of test suites (26 fast-synced wallet builds, every suite's transactions
+    submitted over Blockfrost RPC to node 1.0.400). The plan's limits weren't checked.
   - Lace support for custom Blockfrost endpoints.
   - Which indexer versions Blockfrost and the official preprod endpoint run. The progress
     backoff is inferred from observed message timing, and once the official endpoint
     upgrades, apps hit the same funding-time failure there.
   - Where the −30 transaction-id offset starts, and whether it is constant.
   - Whether Blockfrost drops WebSocket subscriptions deliberately (idle timeout or
-    connection lifetime) or intermittently.
+    connection lifetime) or intermittently. The 2026-09-30 run points to client-side CPU
+    stalls instead (see [Symptom](#symptom)); not confirmed with Blockfrost.
