@@ -1,5 +1,33 @@
 # Runbook: Migrating a Midnight app from the official indexer/RPC to Blockfrost
 
+> **Mainnet (added 2026-09-30).** The official mainnet indexer and RPC
+> (`indexer.mainnet.midnight.network`, `rpc.mainnet.midnight.network`) are shut down from
+> **18:00 ET / 22:00 UTC on 2026-09-30**. Everything below applies to mainnet too: the same
+> URL swap and `project_id` token, the same cursor break, the same progress lag. The worked
+> case and every measured number come from preprod. On mainnet:
+>
+> | Service | Official (shut down) | Blockfrost |
+> |---|---|---|
+> | Indexer HTTP (GraphQL) | `https://indexer.mainnet.midnight.network/api/v4/graphql` | `https://midnight-mainnet.blockfrost.io/api/v0` |
+> | Indexer WS | `wss://indexer.mainnet.midnight.network/api/v4/graphql/ws` | `wss://midnight-mainnet.blockfrost.io/api/v0/ws` |
+> | Node RPC HTTP | `https://rpc.mainnet.midnight.network` | `https://rpc.midnight-mainnet.blockfrost.io` |
+> | Node RPC WS | `wss://rpc.mainnet.midnight.network` | `wss://rpc.midnight-mainnet.blockfrost.io` (same pattern as preprod; not yet verified on mainnet) |
+>
+> - **Create a separate Blockfrost project for Midnight Mainnet.** Tokens are per network,
+>   so a preprod token gets `403` on mainnet. Append `?project_id=<token>` to every URL, as
+>   in [Remediation](#remediation) step 1.
+> - **Re-sync every wallet from genesis.** The preprod id offsets (−22 ledger events, −30
+>   transactions) have **not** been measured on mainnet. Treat all saved wallet state
+>   (`serializeState()` output) and fast-sync/preseed bundles made against the official
+>   mainnet indexer as not portable. Do not shift cursors.
+> - **The cursor diagnostic can't help after the shutdown.** `check-indexer-cursor.mjs`
+>   compares two live indexers. Once the official mainnet endpoint is gone, go straight to
+>   [Remediation](#remediation) step 2 (re-sync from genesis).
+> - **Mainnet full-sync time is not measured.** Size sync timeouts generously, well above
+>   the 67 min measured on preprod.
+> - **Check endpoints and auth** with [Diagnose](#diagnose) step 1, using the mainnet URLs.
+>   `system_chain` should return `"Midnight Mainnet"`.
+
 Moving a preprod app off `indexer.preprod.midnight.network` / `rpc.preprod.midnight.network`
 and onto Blockfrost is mostly a URL swap plus a `project_id` token. There are two breaks:
 
