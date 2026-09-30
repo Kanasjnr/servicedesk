@@ -42,7 +42,12 @@ import { type PrivateStateId, SucceedEntirely, type VerifierKey } from '@midnigh
 export type BlockBudget = {
   readonly transactionByteLimit: bigint;
   readonly block: SyntheticCost;
-  /** Fraction of each limit a single tx may use (other txs share the block). Default 0.8. */
+  /**
+   * Fraction of each block limit a single (unbalanced) tx may use. Default 0.6. A tx is weighted by its
+   * largest normalized cost dimension, and normal txs only get 75% of block weight (midnight-node
+   * NORMAL_DISPATCH_RATIO), minus on-initialize/inherent weight. Measured on node 0.22.1: 62.6% of
+   * bytesWritten was included, 68.1% was rejected with 1010 "Transaction would exhaust the block limits".
+   */
   readonly headroom: number;
 };
 
@@ -55,7 +60,7 @@ export const MAINNET_BUDGET: BlockBudget = {
     bytesWritten: 50_000n,
     bytesChurned: 50_000_000n
   },
-  headroom: 0.8
+  headroom: 0.6
 };
 
 export type BatchDeployOptions<C extends Contract.Any> = {

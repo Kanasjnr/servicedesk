@@ -8,14 +8,17 @@
 //
 // Setup (any empty directory):
 //   npm i @midnight-ntwrk/ledger-v8@8.1.0      # match the ledger your SDK uses (midnight-js 4.1.x -> ledger-v8 8.1.x)
-//   node measure-deploy-cost.mjs <compiled-dir> [--headroom 0.8] [--params ledger-parameters-config.json]
+//   node measure-deploy-cost.mjs <compiled-dir> [--headroom 0.6] [--params ledger-parameters-config.json]
 //
 // <compiled-dir> is the compiler output directory (the one containing contract/, keys/, zkir/).
 // --params takes a midnight-node `res/<network>/ledger-parameters-config.json` to read the block
 // limits from; without it the mainnet values below are used (verified 2026-09-29).
 //
-// Caveat: the synthetic deploy has an empty initial ledger state, so it slightly UNDER-estimates
-// the real deploy (the constructor's initial ledger data is not included). Keep headroom < 1.
+// Headroom: a tx can't use a whole block. Normal txs get at most 75% of block weight, minus
+// on-initialize/inherent weight; measured on node 0.22.1, 62.6% of bytesWritten was included and
+// 68.1% was rejected ("1010: Transaction would exhaust the block limits"). Default 0.6.
+// Caveat: the synthetic deploy has an empty initial ledger state and no fee inputs, so it slightly
+// UNDER-estimates the real deploy (constructor ledger data; wallet balancing adds ~224 bytesWritten).
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -38,11 +41,11 @@ const flag = (name, dflt) => {
   const i = args.indexOf(name);
   return i >= 0 ? args.splice(i, 2)[1] : dflt;
 };
-const headroom = Number(flag('--headroom', '0.8'));
+const headroom = Number(flag('--headroom', '0.6'));
 const paramsFile = flag('--params', undefined);
 const compiledDir = args[0];
 if (!compiledDir) {
-  console.error('usage: node measure-deploy-cost.mjs <compiled-dir> [--headroom 0.8] [--params ledger-parameters-config.json]');
+  console.error('usage: node measure-deploy-cost.mjs <compiled-dir> [--headroom 0.6] [--params ledger-parameters-config.json]');
   process.exit(2);
 }
 
@@ -126,7 +129,7 @@ if (hardFail.length > 0) {
   console.log(`\nRESULT: DOES NOT FIT in one block — exceeds: ${hardFail.join('; ')}`);
   console.log('        Fee computation (wallet balancing) fails with "exceeded block limit in transaction fee computation".');
 } else if (over(full, headroom).length > 0) {
-  console.log(`\nRESULT: fits under the hard limit but not within ${headroom * 100}% headroom — may be rejected when the block is busy.`);
+  console.log(`\nRESULT: under the raw block limit but over ${headroom * 100}% of it — the node will likely reject it with 1010 "Transaction would exhaust the block limits". Batch it.`);
 } else {
   console.log('\nRESULT: fits in one block — a normal deployContract() should work.');
 }
@@ -140,4 +143,4 @@ console.log(`  a single-insert maintenance tx (submitInsertVerifierKeyTx) costs 
 console.log(`  a multi-insert MaintenanceUpdate could carry up to ${m} keys per tx`);
 const remaining = Math.max(0, vks.length - d);
 console.log(`  => 1 deploy tx + ${remaining} single-insert txs (SDK path used by batch-deploy.ts)`);
-process.exit(hardFail.length > 0 ? 1 : 0);
+process.exit(over(full, headroom).length > 0 ? 1 : 0);

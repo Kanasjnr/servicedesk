@@ -45,8 +45,13 @@ const contract = await findDeployedContract(providers, { compiledContract, contr
 
 Options:
 
-- `budget` overrides the network limits. The default is `MAINNET_BUDGET`, with `headroom: 0.8`.
-  Preview, preprod and qanet used the same limits at compile date.
+- `budget` overrides the network limits. The default is `MAINNET_BUDGET`, with `headroom: 0.6`.
+  Preview, preprod and qanet used the same limits at compile date. Don't raise the headroom above
+  about 0.62:
+  - The node's weight check lets a single tx use only about 65% of a block.
+  - Live, 62.6% of `bytesWritten` was included and 68.1% was rejected with RPC 1010.
+  - At 0.7 and at 0.8 the first batch was rejected: once with a thrown `Transaction submission
+    error`, and once the SDK call simply hung.
 - `signingKey` sets your own CMA key (see the runbook caveats).
 - `log` redirects the output.
 
@@ -75,28 +80,52 @@ Options:
    3. It then stores the private state.
    4. It calls `submitInsertVerifierKeyTx` for each remaining circuit, one at a time.
 
-## Verified before hand-off (2026-09-29, offline)
+## Verified before hand-off (2026-09-29)
+
+### Live, on a local stack
+
+The stack: midnight-node `0.22.1`, indexer-standalone `4.0.1` and proof-server `8.0.3`. These are
+the `mainnet.env` images from midnight-js `v4.1.1` testkit, run with `CFG_PRESET=dev`, which has
+the same ledger limits as mainnet. The funded wallet was built with testkit-js 4.1.1
+`MidnightWalletProvider` from genesis seed `...0001`, and the contract had 40 circuits.
+
+- **One-shot `deployContract`:** throws `(FiberFailure) Error: exceeded block limit in transaction
+  fee computation`. Nothing is submitted.
+- **Headroom ceiling:** subset deploys of 13 and 14 circuits (balanced `bytesWritten` 29,795 and
+  31,291) were **included** (`SucceedEntirely`). 15 circuits (34,067) got RPC
+  `1010 Transaction would exhaust the block limits`. Wallet balancing adds only 224 `bytesWritten`.
+- **`batchDeploy` with `execute: true`, default budget, `priorityCircuits: ['c40']`:**
+  - Batch 1 was 14 circuits (stopped at `c14`: 32,560 > 30,000) and was finalized in block 338.
+  - Inserts of c14, c15 and c16 followed, each about 18 s apart, then a simulated crash.
+- **Partial state:**
+  - `findDeployedContract` threw `ContractTypeError`: "Following operations: c17, …, c39, are
+    undefined or have mismatched verifier keys".
+  - `c40` (batch 1) and `c15` (inserted) were called successfully.
+  - `c39` (missing) failed before submission with `Operation 'c39' is undefined for contract
+    state`.
+- **Resume with `contractAddress`:**
+  - It detected 17/40 already on chain and inserted the other 23, in blocks 372–439.
+  - `findDeployedContract` then succeeded, a `c39` call returned `SucceedEntirely`, and 40
+    operations were on chain.
+
+### Offline
 
 - `tsc --strict` type-check against the midnight-js 4.1.1 npm packages: clean.
-- A 40-circuit test contract (compiler 0.31.1). Its full deploy costs `bytesWritten` 84,182, over
-  the 50,000 limit, and `tx.fees()` throws `exceeded block limit in transaction fee computation`.
 - **Ledger simulation** (`ledger-v8` 8.1.0 `LedgerState` + `wellFormed` + `apply`, with proof and
   balance checks off and signatures checked):
-  - A 16-circuit subset deploy from `restrictDeployTo` succeeds, with the counter at 0.
-  - 24 sequential single-key maintenance updates all succeed. At the end, all 40 operations are
-    on chain, every key is byte-identical to the compiled one, and the counter is 24.
+  - A subset deploy from `restrictDeployTo` succeeds, with the counter at 0.
+  - 24 sequential single-key updates succeed, and every on-chain key is byte-identical to the
+    compiled one.
   - Stale counter → `partialSuccess` ("signed counter … did not match").
   - Duplicate insert → `partialSuccess` ("… was already present"), and the counter does not move.
   - Wrong key → rejected at well-formedness ("signature for key id 0 invalid").
 - The module's own `batchDeploy`, run with stub providers:
-  - Dry run: an 18-circuit first batch with 2 priority circuits, stopping at `bytesWritten`
-    40,782 > 40,000. No provider write or submit method is called.
-  - Resume against a partial state inserts only the missing circuits, and against a complete state
-    inserts nothing.
+  - The dry run calls no provider write or submit method.
+  - Resume against a partial state inserts only the missing circuits.
   - A mismatched on-chain key aborts, and a missing CMA key aborts.
 
-**Not yet verified:** a run against a live node, including real proving, wallet balancing and
-indexer reads. Do the first run on preview or preprod, and add its tx hashes to this file.
+**Not yet verified:** preview, preprod or mainnet. The first real-network run should add its tx
+hashes here.
 
 ## Re-verify when versions move
 
