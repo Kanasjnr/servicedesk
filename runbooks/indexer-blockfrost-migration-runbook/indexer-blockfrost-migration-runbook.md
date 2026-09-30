@@ -1,13 +1,19 @@
 # Runbook: Migrating a Midnight app from the official indexer/RPC to Blockfrost
 
 Moving a preprod app off `indexer.preprod.midnight.network` / `rpc.preprod.midnight.network`
-and onto Blockfrost is mostly a URL swap plus a `project_id` token. The one hard break:
-**Blockfrost numbers ledger events differently from the official indexer**, so any wallet
-sync cursor or fast-sync (preseed) bundle made against one indexer fails on the other. Use
-this runbook to do the migration, recognise that failure, and pick a remediation.
+and onto Blockfrost is mostly a URL swap plus a `project_id` token. There are two breaks:
+
+- **Blockfrost numbers ledger events and transactions differently from the official
+  indexer.** Any wallet sync cursor or fast-sync (preseed) bundle made against one indexer
+  fails on the other.
+- **Blockfrost's indexer slows its unshielded progress updates on idle subscriptions.**
+  Code that waits a short, fixed time for an "unshielded synced" state right after a
+  transaction then times out, even though the funds have arrived.
+
+Use this runbook to do the migration, recognise both failures, and pick a remediation.
 
 _Compiled 2026-09-29 from a preprod migration of the `midnight-examples` hello-world suite
-(`@midnight-ntwrk/wallet-sdk` 1.2.0, `@midnight-ntwrk/ledger-v8` 8.1.2, midnight-js 4.1.1).
+(`@midnight-ntwrk/wallet-sdk` 1.2.0, `@midnight-ntwrk/ledger-v8` 8.1.2, midnight-js and testkit-js 4.1.1).
 Event ids, offsets and schema fields are point-in-time. Re-run the diagnostic before
 asserting any of them. The Midnight ecosystem changes fast._
 
@@ -15,7 +21,7 @@ asserting any of them. The Midnight ecosystem changes fast._
 
 ## Symptom
 
-Three failures show up in migration order. The last one is the subtle one.
+Four failures show up in migration order. The last two are the subtle ones.
 
 - **Every Blockfrost call returns 403.** Indexer HTTP, indexer WS and node RPC all answer
   `{"error":"Forbidden","message":"Missing project token. Please include project_id in your request.","status_code":403}`.
@@ -39,6 +45,26 @@ Three failures show up in migration order. The last one is the subtle one.
   official indexer and then syncing it from Blockfrost. The same applies to any saved wallet
   state (`serializeState()` output) carried across indexers. The exact indices in the
   message vary with the cursor.
+- **"Wallet sync timeout" right after funding.** The wallet synced, the faucet NIGHT arrived
+  and the balance shows it, but a follow-up sync check then times out. In `midnight-examples`
+  it came from `@midnight-ntwrk/testkit-js` `waitForFunds`, which calls `syncWallet` with a
+  fixed 90 s timeout:
+
+  ```
+  Wallet synced state emission (synced=false): { shielded=true, unshielded=false, dust=false }
+  Error: Wallet sync timeout after 90000ms
+   ❯ …/@midnight-ntwrk/testkit-js/src/wallet/wallet-utils.ts:87:40
+  ```
+
+  `unshielded=false` stays put for minutes after the transaction lands. The same code
+  passes against the official preprod indexer.
+
+Also seen on Blockfrost, and harmless: WebSocket subscriptions drop every few minutes.
+Each sub-wallet logs one `Wallet.Sync: [object Object]` (`_tag: 'Wallet.Sync'`) to stderr,
+then resubscribes from its cursor with exponential backoff (1 s doubling, capped at 2 min)
+and carries on. In a 67-minute sync this happened three times: once each for the
+unshielded, shielded and dust subscriptions, including the dust one mid-stream. Every
+resume was clean. No action is needed unless the error repeats without progress.
 
 ## Root cause
 
@@ -68,7 +94,38 @@ insert, and the sync layer retries the same batch forever. Shielded sync can rea
 `isStrictlyComplete()` from the same shifted cursor for an empty wallet. That shows only
 that no tree insert collided, not that the state is correct, so do not rely on it.
 
-The other two symptoms are plain configuration: Blockfrost needs its project token on every
+**Transaction ids are indexer numbering too.** The same funding transaction
+(`c9a01ee7…fd849706`, block 2770188) is id 632821 on the official indexer and 632791 on
+Blockfrost, an offset of −30. This was measured on that one transaction; where the offset
+starts has not been bisected. The unshielded wallet resumes its
+`unshieldedTransactions(address, transactionId)` subscription from its last applied
+transaction id. So saved unshielded state is also bound to its indexer, just like the ledger
+event cursors above.
+
+**Unshielded "synced" waits on the indexer's next progress poll.** The unshielded wallet
+counts as synced (`isStrictlyComplete()`) only when its applied transaction id equals the
+indexer's latest `UnshieldedTransactionsProgress.highestTransactionId`, and it must be
+connected (`@midnight-ntwrk/wallet-sdk-unshielded-wallet` `SyncProgress.js`). A new
+transaction moves the applied id at once. The highest id moves only when the indexer
+next sends a progress message, which it does on a timer, not on each new transaction.
+
+The current indexer (`midnight-indexer` `indexer-api/src/infra/api/v4/subscription/unshielded.rs`,
+`polling.rs`) polls at `progress_update_interval` (30 s by default). While nothing changes it
+backs off up to 8× (about 4 min), with ±20% jitter. Holding one subscription open for 3 min
+on each preprod indexer:
+
+| | Progress messages after the first |
+|---|---|
+| Official indexer | every 30 s, flat |
+| Blockfrost | after 35 s, then 55 s, then none in the last 60 s |
+
+The inference is that Blockfrost runs a newer indexer with the idle backoff and the official
+preprod endpoint runs an older one without it (not confirmed with either operator). A wallet
+that has been idle for a while gets a transaction, and the next progress message can be up
+to ~4.8 min away. Any check that waits less than that for `isStrictlyComplete()` fails. By
+the same code, shielded progress (`shielded.rs`) should behave alike; that is untested.
+
+The first two symptoms are plain configuration: Blockfrost needs its project token on every
 request, and the SDK needs a real `wss://` node URL.
 
 ## Key identifiers
@@ -101,10 +158,18 @@ request, and the SDK needs a real `wss://` node URL.
   contract-maintenance types, and a bridge API (`bridgeEvents`, `bridgeBalance`,
   `bridgeDeposits`, `bridgePoolSummary`, …). Code built only on the official schema needs
   no change.
-- **Divergence point.** Official ids 989781–989802; offset −22 thereafter (at compile date).
+- **Divergence point.** Ledger events: official ids 989781–989802, offset −22 thereafter
+  (at compile date). Transactions: −30 at official tx id 632821 (single sample).
 - **Error text.** `values inserted non-linearly into dust generation tree` (also seen as
   `… into zswap commitment tree` / `… into dust commitment tree` for other cursor/tree
-  mismatches).
+  mismatches). For the progress lag: `Wallet sync timeout after 90000ms` from testkit
+  `syncWallet`, with `unshielded=false` in the emissions just before.
+- **Progress polling (current indexer).** `progress_update_interval` 30 s; idle backoff up to
+  8× (`IDLE_BACKOFF_MAX_MULTIPLE`); jitter 0.2 (`JITTER_FRACTION`); progress cache TTL 5 s
+  (from `midnight-indexer` `qa/tests/tests/e2e/subscription-polling.test.ts`).
+- **Full genesis sync on Blockfrost preprod:** 67 min 21 s (2026-09-29, wallet SDK 1.2.0,
+  ~1.575M dust events at ~390 events/s; shielded and unshielded finish in the first minutes).
+  About the same as the official indexer's ~78 min.
 
 ## Diagnose
 
@@ -189,8 +254,12 @@ anything.
 2. **Re-sync wallets from genesis on the new indexer.** Discard saved wallet state from the
    old indexer. Do **not** migrate `serializeState()` output. A fresh wallet created against
    the new indexer, or an existing seed restored with a full sync, is correct by
-   construction. The cost is the full sync time (~78 min on preprod against the official
-   indexer, dominated by dust; not yet timed on Blockfrost).
+   construction. The cost is the full sync time, dominated by dust: 67 min on Blockfrost
+   preprod, ~78 min on the official indexer. Check the app's sync timeout covers that. In
+   `midnight-examples`, `syncWallet`'s `Rx.timeout({ each })` sits after the "is complete"
+   filter, so it caps the **whole** sync, not the gap between progress updates. Its 60 min
+   default failed at 89% dust (raise it with `MIDNIGHT_SYNC_TIMEOUT_MS`). Test runners need
+   the same headroom in their hook timeouts (vitest `--hookTimeout`).
 
 3. **Cut a fast-sync / preseed bundle against the target indexer.** A bundle's cursors are
    only valid on the indexer that produced them. Cut with the cutter pointed at Blockfrost
@@ -205,9 +274,25 @@ anything.
    address, block height or block hash, and tx submission over RPC, carry no ledger-event
    cursor and can use Blockfrost.
 
-5. **Not recommended: shift cursors by the offset.** Subtracting 22 from every stored id
-   lines them up today. But the offset comes from one indexer skipping ids, and any future
-   skip on either side silently changes it. Treat cursors as bound to their indexer.
+5. **Don't gate on a short strict-sync check after a transaction.** On Blockfrost (and on
+   any indexer with idle progress backoff), `isStrictlyComplete()` for unshielded can stay
+   false for up to ~4.8 min after a transaction. Wait for what you actually need instead:
+   - after a faucet transfer, the NIGHT balance;
+   - before a transaction that pays fees, spendable DUST (`state.dust.availableCoins`);
+   - otherwise `isCompleteWithin(n)`, or a timeout well over 5 min.
+
+   testkit's `waitForFunds` can't be configured (its `syncWallet` is fixed at 90 s).
+   `midnight-examples` replaced it in `packages/fast-sync/src/funding.ts`. It registers
+   unregistered NIGHT UTXOs with `wallet.registerNightUtxosForDustGeneration` →
+   `finalizeRecipe` → `submitTransaction` (the same calls testkit makes), then waits for a
+   spendable DUST coin. Verified 2026-09-30: on Blockfrost preprod the registration was
+   submitted 2 s after sync completed and DUST was spendable 14 s later. The hello-world
+   suite then passed (deploy and `storeMessage`), where the testkit path had timed out.
+
+6. **Not recommended: shift cursors by the offset.** Subtracting 22 from every stored event
+   id (or 30 from transaction ids) lines them up today. But the offsets come from the
+   indexers numbering differently, and any future skip on either side silently changes
+   them. Treat cursors as bound to their indexer.
 
 **Browser DApps.** With the connector API, endpoints come from the user's wallet
 (`getConfiguration()` → `indexerUri`, `indexerWsUri`, `substrateNodeUri`), not from DApp
@@ -221,6 +306,7 @@ server-side proxy or a token scoped for public use.
   (2026-09-29). Upstream tracking for the id gap: `midnightntwrk/servicedesk#216`. Relevant
   files in that repo:
   `examples/hello-world/src/config.ts` (the migrated config);
+  `packages/fast-sync/src/funding.ts` (funding gate without testkit `waitForFunds`);
   `packages/fast-sync/src/fast-wallet.ts` (`new URL(env.nodeWS)` for relay and submission;
   seeds sub-wallets from a reference bundle); `packages/fast-sync/scripts/cut-preseed.ts`
   (`--from-genesis`); `FAST-SYNC.md` ("When a bundle goes bad").
@@ -228,9 +314,25 @@ server-side proxy or a token scoped for public use.
   subscriptions (`dustLedgerEvents(id: $id) { id raw maxId }`);
   `@midnight-ntwrk/wallet-sdk-dust-wallet` `dist/v1/Sync.js` (resume by `id`);
   `@midnight-ntwrk/ledger-v8` `DustLocalState.replayEventsWithChanges` (the throw site).
+  Unshielded: `@midnight-ntwrk/wallet-sdk-indexer-client` `UnshieldedTransactions`
+  (`unshieldedTransactions(address, transactionId)`, yields `UnshieldedTransaction` or
+  `UnshieldedTransactionsProgress { highestTransactionId }`);
+  `@midnight-ntwrk/wallet-sdk-unshielded-wallet` `dist/v1/SyncProgress.js`
+  (`isStrictlyComplete` = connected and applied id == highest id) and `dist/v1/Sync.js`;
+  `@midnight-ntwrk/testkit-js` 4.1.1 `syncWallet` / `waitForFunds` (fixed 90 s).
+- Indexer: `midnightntwrk/midnight-indexer`
+  `indexer-api/src/infra/api/v4/subscription/unshielded.rs` (`progress_updates`),
+  `…/subscription/polling.rs` (`next_poll_interval`), `indexer-api/config.yaml`
+  (`progress_update_interval: "30s"`).
 - Official endpoints: <https://docs.midnight.network/guides/networks-and-environments>.
 - Open questions to settle before relying on this long-term:
   - Why the official preprod indexer skips ids 989781–989802, and whether more skips should
     be expected (indexer team; `servicedesk#216`).
   - Blockfrost request quotas for a full genesis sync (preprod event ids run to ~1.58M).
   - Lace support for custom Blockfrost endpoints.
+  - Which indexer versions Blockfrost and the official preprod endpoint run. The progress
+    backoff is inferred from observed message timing, and once the official endpoint
+    upgrades, apps hit the same funding-time failure there.
+  - Where the −30 transaction-id offset starts, and whether it is constant.
+  - Whether Blockfrost drops WebSocket subscriptions deliberately (idle timeout or
+    connection lifetime) or intermittently.
