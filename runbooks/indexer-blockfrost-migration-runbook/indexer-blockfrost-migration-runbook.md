@@ -54,7 +54,10 @@ payloads for the same chain (the block hash at height 2684544 matches:
 | ≥ 989803 → tip | id N | **id N − 22**, same payload |
 
 At compile time the offset was a constant −22 from 989781 to the tip (`maxId` 1575271
-official vs 1575249 Blockfrost). Why the official indexer skips those 22 ids is unconfirmed.
+official vs 1575249 Blockfrost). The gap sits between blocks 1130986 (last id 989780) and
+1130996 (first id 989803 official, 989781 Blockfrost); the blocks between carry no dust or
+zswap events on either indexer, and every block hash matches. Why the official indexer skips
+those 22 ids is unconfirmed; tracked in `midnightntwrk/servicedesk#216`.
 
 Wallet sync resumes each ledger-event subscription from a stored event id
 (`dustLedgerEvents(id: $id)`, `zswapLedgerEvents(id: $id)` in
@@ -215,7 +218,8 @@ server-side proxy or a token scoped for public use.
 ## Reference material
 
 - Worked case: preprod migration of `midnightntwrk/midnight-examples` hello-world
-  (2026-09-29). No servicedesk issue was filed. Relevant files in that repo:
+  (2026-09-29). Upstream tracking for the id gap: `midnightntwrk/servicedesk#216`. Relevant
+  files in that repo:
   `examples/hello-world/src/config.ts` (the migrated config);
   `packages/fast-sync/src/fast-wallet.ts` (`new URL(env.nodeWS)` for relay and submission;
   seeds sub-wallets from a reference bundle); `packages/fast-sync/scripts/cut-preseed.ts`
@@ -227,6 +231,6 @@ server-side proxy or a token scoped for public use.
 - Official endpoints: <https://docs.midnight.network/guides/networks-and-environments>.
 - Open questions to settle before relying on this long-term:
   - Why the official preprod indexer skips ids 989781–989802, and whether more skips should
-    be expected (indexer team).
+    be expected (indexer team; `servicedesk#216`).
   - Blockfrost request quotas for a full genesis sync (preprod event ids run to ~1.58M).
   - Lace support for custom Blockfrost endpoints.
