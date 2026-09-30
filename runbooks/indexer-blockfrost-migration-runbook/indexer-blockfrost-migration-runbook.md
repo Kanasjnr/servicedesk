@@ -16,13 +16,26 @@
 > - **Create a separate Blockfrost project for Midnight Mainnet.** Tokens are per network,
 >   so a preprod token gets `403` on mainnet. Append `?project_id=<token>` to every URL, as
 >   in [Remediation](#remediation) step 1.
-> - **Re-sync every wallet from genesis.** The preprod id offsets (−22 ledger events, −30
->   transactions) have **not** been measured on mainnet. Treat all saved wallet state
->   (`serializeState()` output) and fast-sync/preseed bundles made against the official
->   mainnet indexer as not portable. Do not shift cursors.
-> - **The cursor diagnostic can't help after the shutdown.** `check-indexer-cursor.mjs`
->   compares two live indexers. Once the official mainnet endpoint is gone, go straight to
->   [Remediation](#remediation) step 2 (re-sync from genesis).
+> - **Only saved wallet state from the official indexer is at risk.** The cursor break needs
+>   both of these: a wallet that **persisted** its sync state while connected to the official
+>   mainnet indexer (`serializeState()` output, a fast-sync/preseed bundle, or stored
+>   ledger-event or transaction ids), **and** that state then resumed against Blockfrost.
+>   Not affected:
+>   - wallet apps that already sync through Blockfrost, or run their own indexer: the
+>     shutdown doesn't change their indexer
+>   - wallets that sync from genesis on every start
+>   - apps that only read contract state (by address, block height or block hash) or submit
+>     transactions over RPC: these carry no indexer-issued ids
+>
+>   The preprod id offsets (−22 ledger events, −30 transactions) have **not** been measured
+>   on mainnet, and mainnet numbering may match. Until it's measured, treat affected saved
+>   state as not portable. Don't shift cursors. If sync stalls with `values inserted
+>   non-linearly…`, discard that wallet's saved state and re-sync it from genesis
+>   ([Remediation](#remediation) step 2). A wallet that syncs cleanly needs no action.
+> - **Measure the offset before the shutdown if you can.** `check-indexer-cursor.mjs`
+>   compares two live indexers, so run it against mainnet (`--a-http`/`--a-ws` official,
+>   `--b-*` Blockfrost) before 18:00 ET. Afterwards it can't help: use the stall symptom
+>   above instead.
 > - **Mainnet full-sync time is not measured.** Size sync timeouts generously, well above
 >   the 67 min measured on preprod.
 > - **Check endpoints and auth** with [Diagnose](#diagnose) step 1, using the mainnet URLs.
