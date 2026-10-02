@@ -31,6 +31,9 @@
  * The Blockfrost token is appended to B's URLs as ?project_id=... and is
  * redacted from all output.
  *
+ * With --manifest it first prints the indexer host the bundle records, if any
+ * (newer cutters write one), which needs no query to A.
+ *
  * Exit code: 0 = every checked cursor is portable, 2 = at least one is not,
  * 1 = the check itself failed (endpoint down, bad arguments).
  */
@@ -73,8 +76,12 @@ const STREAMS = { dust: 'dustLedgerEvents', zswap: 'zswapLedgerEvents' };
 const wanted = opt('stream', 'both');
 const cursors = [];
 const manifestPath = opt('manifest');
+let manifestIndexer;
 if (manifestPath) {
   const m = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  // Bundles cut by newer tooling record the indexer host that produced their
+  // cursors. That answers "which indexer is this from?" without querying A.
+  manifestIndexer = typeof m.indexer === 'string' ? m.indexer : undefined;
   for (const w of Object.values(m.witnesses ?? {})) {
     const key = Object.keys(STREAMS).find((k) => STREAMS[k] === w.stream);
     if (key && (wanted === 'both' || wanted === key)) cursors.push({ stream: key, id: w.id });
@@ -159,6 +166,13 @@ function take(wsUrl, stream, id, n, timeoutMs = 60_000) {
 let failed = false;
 let notPortable = false;
 
+if (manifestPath) {
+  log('== 0. Manifest');
+  log(manifestIndexer
+    ? `  cut against indexer: ${manifestIndexer} (recorded in the manifest)`
+    : '  no indexer recorded in the manifest; steps 2-3 need A reachable to tell where it came from');
+}
+
 // 1. Target endpoints answer.
 log('== 1. Target endpoints');
 try {
@@ -183,7 +197,14 @@ try {
   const same = ha.block?.hash && ha.block.hash === hb.block?.hash;
   log(`  height ${height}: A ${ha.block?.hash} | B ${hb.block?.hash} -> ${same ? 'same chain' : 'DIFFERENT'}`);
   if (!same) failed = true;
-} catch (e) { failed = true; log(`  FAIL ${e.message}`); }
+} catch (e) {
+  failed = true;
+  log(`  FAIL ${e.message}`);
+  if (/HTTP 5\d\d/.test(e.message)) {
+    log('  A is unreachable, so cursors cannot be compared. Without A, check the manifest\'s');
+    log('  recorded indexer (step 0) or compare its cursors with the indexers\' maxId (see the runbook).');
+  }
+}
 
 // 3. Cursor portability.
 log('== 3. Cursor portability');
