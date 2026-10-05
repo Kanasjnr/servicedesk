@@ -1,8 +1,8 @@
 # CODEOWNERS — midnightntwrk/servicedesk
 #
-# Default owners: @midnightntwrk/mn-servicedesk and the @midnightntwrk/mn-sre team. The team
-# co-ownership eliminates the previous single-point-of-failure on a single
-# user for routine repo changes.
+# Default owners: @midnightntwrk/mn-servicedesk, the @midnightntwrk/mn-sre team and
+# the @midnightntwrk/mnf-sd-support team. The team co-ownership eliminates the
+# previous single-point-of-failure on a single user for routine repo changes.
 #
 # Governance, security-policy and secret-touching files require
 # @midnightntwrk/mn-security sign-off in addition to @midnightntwrk/mn-servicedesk. mn-sre is
@@ -12,7 +12,7 @@
 # repos (see midnightntwrk/midnight-node) and extended with the three
 # workflows in this repo that hold live secrets / App credentials.
 
-*                                           @midnightntwrk/mn-servicedesk @midnightntwrk/mn-sre
+*                                           @midnightntwrk/mn-servicedesk @midnightntwrk/mn-sre @midnightntwrk/mnf-sd-support
 
 # ── Governance + policy ──────────────────────────────────────────────────────
 /CODE_OF_CONDUCT.md                         @midnightntwrk/mn-servicedesk @midnightntwrk/mn-security
