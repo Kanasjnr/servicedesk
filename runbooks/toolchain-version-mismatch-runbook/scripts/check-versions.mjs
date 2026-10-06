@@ -74,7 +74,7 @@ for (let i = 0; i < args.length; i++) {
   }
   if (!known.includes(a)) fail(`unknown argument '${a}'\n${USAGE}`);
   const v = args[i + 1];
-  if (v === undefined || v.startsWith('--')) fail(`${a} needs a value\n${USAGE}`);
+  if (v === undefined || v === '' || v.startsWith('--')) fail(`${a} needs a value\n${USAGE}`);
   opts[a.slice(2)] = v;
   i++;
 }
@@ -302,14 +302,20 @@ function run(cmd, cmdArgs) {
 }
 
 async function rpc(url, method) {
-  const res = await fetch(withKey(url), {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params: [] }),
-    signal: AbortSignal.timeout(15_000),
-  });
+  let res;
+  try {
+    res = await fetch(withKey(url), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params: [] }),
+      signal: AbortSignal.timeout(15_000),
+    });
+  } catch (e) {
+    throw Object.assign(new Error(e.message), { unreachable: true });
+  }
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const body = await res.json();
+  if (!body || typeof body !== 'object') throw new Error('not a JSON-RPC response');
   if (body.error) throw new Error(body.error.message ?? JSON.stringify(body.error));
   return body.result;
 }
@@ -368,11 +374,12 @@ async function main() {
     add('Packages', 'Yarn Plug\'n\'Play', '', 'SKIP', 'package checks need node_modules; use `yarn why`');
     fix(`This project uses Yarn Plug'n'Play (${path.join(pnpRoot, '.pnp.cjs')}), which this script can't read. Check versions with \`yarn why @midnight-ntwrk/compact-runtime\` and \`yarn why @midnight-ntwrk/onchain-runtime-v3\`, or run it on a copy installed with \`nodeLinker: node-modules\`.`);
   } else if (!hasNodeModules) {
-    add('Packages', 'no node_modules', '', 'WARN', `nothing installed in ${projectDir} (wrong --project?)`);
+    // Every package check needs node_modules; carrying on would print a false "no mismatch".
+    fail(`no node_modules in ${projectDir}: pass --project <the DApp directory that has node_modules>`);
   }
-  const pkgs = !pnpRoot && hasNodeModules ? scanNodeModules(projectDir) : new Map();
+  const pkgs = !pnpRoot ? scanNodeModules(projectDir) : new Map();
   const copies = (name) => pkgs.get(name) ?? [];
-  const checkPackages = !pnpRoot && hasNodeModules;
+  const checkPackages = !pnpRoot;
 
   // The copies midnight-js actually loads: the compact-runtime (and the on-chain runtime it
   // brings) reached from each midnight-js-protocol copy and from the compact-js each of those uses.
@@ -542,7 +549,7 @@ async function main() {
           const desc = (o) => (o ? `${o.name.split('/')[1]} ${o.version} at ${rel(o.dir)}` : '(none)');
           add('Contract and midnight-js share the on-chain runtime', 'no', 'yes', 'MISMATCH', `${cOn ? `${cOn.name.split('/')[1]} ${cOn.version}` : 'none'} vs ${other.name.split('/')[1]} ${other.version}`);
           if (cOn && cOn.name !== other.name) {
-            fix(`The contract's runtime loads ${desc(cOn)}, midnight-js loads ${desc(other)}: different on-chain runtimes. This comes from a contract compiled for a newer runtime; see the compiled-contract row.`);
+            fix(`The contract's runtime loads ${desc(cOn)}, midnight-js loads ${desc(other)}: different on-chain runtimes. A compact-runtime 0.19+ copy brings onchain-runtime-v4: an unpinned runtime install, or a contract compiled by 0.34+. See the Compact runtime and compiled-contract rows.`);
           } else {
             fix(`The contract reaches the on-chain runtime at ${desc(cOn)}, midnight-js at ${desc(other)}. Deploys fail with "expected instance of ContractMaintenanceAuthority" even when both are the same version. Install ${RUNTIME}@${expRuntime} once where both resolve it (usually the workspace root), not inside the contract package, then reinstall.`);
           }
@@ -551,7 +558,15 @@ async function main() {
     }
     // ZKIR v3 is rejected by proof server 8.1.0: "bad input" on /check and /prove.
     const zkirDir = path.join(compiledDir, 'zkir');
-    const bz = isDir(zkirDir) ? fs.readdirSync(zkirDir).filter((f) => f.endsWith('.bzkir')) : [];
+    let bz = [];
+    let zkirReadable = true;
+    try {
+      bz = isDir(zkirDir) ? fs.readdirSync(zkirDir).filter((f) => f.endsWith('.bzkir')) : [];
+    } catch {
+      zkirReadable = false;
+      unreadable.add(zkirDir);
+    }
+    if (zkirReadable && !bz.length) add('ZKIR format', 'no .bzkir', 'v2', 'SKIP', 'built with --skip-zk?');
     let v3 = 0;
     let unread = 0;
     for (const f of bz) {
@@ -578,14 +593,22 @@ async function main() {
   const expProof = expectedFor('Proof server');
   if (opts['proof-server']) {
     const base = opts['proof-server'].replace(/\/+$/, '');
+    let res;
     try {
-      const res = await fetch(`${base}/version`, { signal: AbortSignal.timeout(10_000) });
-      const v = fullVer(await res.text());
-      if (!res.ok || !v) throw new Error(`HTTP ${res.status}`);
-      add('Proof server', v, expProof, !expProof ? 'WARN' : v === expProof ? 'OK' : 'DIFFERS', expProof ? '' : 'not in matrix');
-      if (expProof && v !== expProof) fix(`The proof server is ${v}; ${opts.network} is tested with ${expProof}. Run midnightntwrk/proof-server:${expProof}.`);
+      res = await fetch(`${base}/version`, { signal: AbortSignal.timeout(10_000) });
     } catch (e) {
       add('Proof server', 'unreachable', expProof, 'WARN', e.message);
+    }
+    if (res && !res.ok) {
+      add('Proof server', 'error', expProof, 'WARN', `HTTP ${res.status}`);
+    } else if (res) {
+      const v = fullVer(await res.text().catch(() => ''));
+      if (!v) {
+        add('Proof server', 'no version', expProof, 'WARN', 'answered without a version (wrong URL or port?)');
+      } else {
+        add('Proof server', v, expProof, !expProof ? 'WARN' : v === expProof ? 'OK' : 'DIFFERS', expProof ? '' : 'not in matrix');
+        if (expProof && v !== expProof) fix(`The proof server is ${v}; ${opts.network} is tested with ${expProof}. Run midnightntwrk/proof-server:${expProof}.`);
+      }
     }
   } else {
     add('Proof server', 'not checked', expProof, 'SKIP', 'pass --proof-server');
@@ -596,6 +619,7 @@ async function main() {
   if (opts.rpc) {
     try {
       const nodeLedger = fullVer(await rpc(opts.rpc, 'midnight_ledgerVersion'));
+      if (!nodeLedger) throw new Error('no ledger version in the RPC response');
       const build = await rpc(opts.rpc, 'system_version');
       add('Node build', build, '', 'INFO');
       add('Node ledger', nodeLedger, '', 'INFO');
@@ -609,7 +633,7 @@ async function main() {
         fix(`ledger-v8 ${differing.join(', ')} and the node's ledger ${nodeLedger} differ in minor version. Use the midnight-js release the matrix lists for ${opts.network}; it brings a compatible ledger.`);
       }
     } catch (e) {
-      add('Node', 'unreachable', '', 'WARN', e.message);
+      add('Node', e.unreachable ? 'unreachable' : 'bad response', '', 'WARN', e.message);
     }
   } else {
     add('Node', 'not checked', '', 'SKIP', 'pass --rpc');
