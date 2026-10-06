@@ -34,9 +34,10 @@ before anything is submitted.
   ```
 
   The contract was compiled for one runtime and another is installed. Each compiler pins one:
-  0.31.1 → 0.16.0, 0.34.0 → 0.19.0, 0.35.0 → 0.20.0. An unpinned
-  `npm i @midnight-ntwrk/compact-runtime` installs npm `latest` (0.20.0), so a supported 0.31.1
-  contract fails the same way (`expects 0.16.0, runtime is 0.20.0`).
+  0.31.1 → 0.16.0, 0.34.0 → 0.19.0, 0.35.0 → 0.20.0. Adding the runtime unpinned
+  (`npm i @midnight-ntwrk/compact-runtime` in a project that doesn't list it yet, or `…@latest`)
+  installs npm `latest` (0.20.0), so a supported 0.31.1 contract fails the same way
+  (`expects 0.16.0, runtime is 0.20.0`).
 - **`deployContract` fails with an error that doesn't mention versions** (→ Remediation 1 and 2):
 
   ```text
@@ -112,7 +113,9 @@ Four couplings turn that drift into the errors above:
    `@midnight-ntwrk/onchain-runtime-v3`. `compact-runtime` 0.19 and 0.20 (compilers 0.34 and
    0.35) run on `@midnightntwrk/onchain-runtime-v4`, a 4.0.0 release candidate. No released
    midnight-js can deploy those contracts. Installing the newer runtime only turns the version
-   error into the `coinPublicKey` one.
+   error into the `coinPublicKey` one. The midnight-js 5.0.0 release candidates (npm `rc` tag)
+   do depend on runtime 0.20.0 and `onchain-runtime-v4`, but they're built for the ledger-9
+   line, which no network runs yet, so they aren't the way out either.
 3. **The on-chain runtime's classes are checked with `instanceof`.** `onchain-runtime-v3` owns
    WASM classes such as `ContractMaintenanceAuthority`. The contract (through its
    `compact-runtime`) and midnight-js (through `compact-js`'s `compact-runtime`) must reach the
@@ -150,7 +153,7 @@ reliably identify the build.
   `@midnight-ntwrk/ledger-v8`.
 - **Compiled output:** `<out>/contract/index.js` contains `checkRuntimeVersion('<version>')`.
   `<out>/zkir/*.bzkir` starts with `midnight:ir-source[v2]`; with `--feature-zkir-v3` it is
-  `[v3]` (0.31.1) or `[v3-generic]` (0.34).
+  `[v3]` (0.31.1) or `[v3-generic]` (0.34, 0.35).
 - **Toolchain:** `compact --version` (devtools), `compact compile --version` (default compiler),
   `compact compile +<version> …` (one build with a specific compiler), `compact list`.
 - **Proof server:** `GET /version` (plain text, e.g. `8.1.0`), `GET /proof-versions`,
@@ -187,21 +190,25 @@ reliably identify the build.
    ```text
    component                                            installed                 matrix   status
    Compact runtime                                      3 copies: 0.16.0, 0.20.0  0.16.0   MISMATCH
+   …
    Compiled contract wants runtime                      0.20.0                    0.16.0   MISMATCH
+   Runtime the contract loads                           0.20.0                    0.20.0   OK
    Contract and midnight-js share the on-chain runtime  no                        yes      MISMATCH
    …
    RESULT: 3 mismatch(es). See the runbook for the matching error text.
    ```
 
-   Yarn Plug'n'Play projects have no `node_modules`; the script says so and skips the package
-   checks.
+   In the "Runtime the contract loads" row, the matrix column shows the runtime the contract
+   wants. If `--project` has no `node_modules`, the script stops with exit 1 rather than report a
+   clean result. Yarn Plug'n'Play projects have no `node_modules` either; the script says so and
+   skips the package checks.
 2. **By hand, if you can't run it:**
 
    ```sh
    compact compile --version                                  # default compiler
    grep -o "checkRuntimeVersion([^)]*)" <out>/contract/index.js
-   npm ls @midnight-ntwrk/compact-runtime @midnight-ntwrk/onchain-runtime-v3   # or pnpm why / yarn why
-   head -c 40 <out>/zkir/*.bzkir                              # ir-source[v2] is what 8.1.0 reads
+   npm ls @midnight-ntwrk/compact-runtime @midnight-ntwrk/onchain-runtime-v3 @midnightntwrk/onchain-runtime-v4   # or pnpm why / yarn why
+   head -c 40 <out>/zkir/*.bzkir      # ir-source[v2] is what 8.1.0 reads (full build; --skip-zk writes no .bzkir)
    curl -s http://localhost:6300/version
    ```
 

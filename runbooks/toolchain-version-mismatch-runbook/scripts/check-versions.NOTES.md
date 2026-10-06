@@ -21,7 +21,7 @@ script was tested. **The user runs it** against their own DApp repo.
 | Compiled contract wants runtime | `checkRuntimeVersion(…)` in `<out>/contract/index.js` (any quote style) | the matrix runtime wouldn't satisfy it |
 | Runtime the contract loads | the copy Node resolves from `<out>/contract` | none, or one that fails the runtime's rule |
 | Contract and midnight-js share the on-chain runtime | the on-chain runtime each side's `compact-runtime` depends on, resolved from it | different directories (different copies or different packages) |
-| ZKIR format | header of `<out>/zkir/*.bzkir` | `ir-source[v3…]` |
+| ZKIR format | header of `<out>/zkir/*.bzkir` | `ir-source[v3…]`; `SKIP` when there's no `.bzkir` (a `--skip-zk` build) |
 | Proof server | `GET <url>/version` | never (`DIFFERS` only) |
 | Node build, Node ledger | RPC `system_version`, `midnight_ledgerVersion` | never: `INFO`; `WARN` if a ledger copy differs in minor version |
 
@@ -34,8 +34,10 @@ directory is counted once. Copies outside every `node_modules` (a contract packa
 linked in) are only found through `--compiled`. Yarn Plug'n'Play is detected and skipped.
 
 If the matrix has no `Compact toolchain` or `Compact runtime` entry for the network, the script
-stops with exit 1 rather than compare against nothing. Unreadable files and directories become
-`WARN` rows; they never turn into a `MISMATCH` or a crash.
+stops with exit 1 rather than compare against nothing. The same goes for a `--project` with no
+`node_modules` (unless it's Yarn Plug'n'Play): every package check depends on it, so carrying on
+would print a false clean result. Empty argument values are rejected. Unreadable files and
+directories become `WARN` rows; they never turn into a `MISMATCH` or a crash.
 
 ## Verified before hand-off (2026-10-05)
 
@@ -125,11 +127,18 @@ compiler is 0.34.0) and is left out below.
 | Matrix with `Compact runtime` renamed, missing for the network, no components, `null` | could not run | 1 | one message |
 | Live proof server 8.1.0 + live preprod RPC | no mismatch | 0 | node `1.0.400-c338b9ac`, ledger 8.1.2 |
 | Proof server not running | no mismatch | 0 | proof server `WARN` |
-| No `--network`, bad `--network`, missing or file `--project`, missing `--compiled`, unknown flag, flag without value, bad URL, unreadable `--matrix` | could not run | 1 | message (plus the usage line where useful) |
+| No `--network`, bad `--network`, missing or file `--project`, missing `--compiled`, unknown flag, flag without value, empty value (`--compiled ""`, `--rpc ""`), bad URL, unreadable `--matrix` | could not run | 1 | message (plus the usage line where useful) |
+| Run from a directory with no `node_modules`, without `--project` | could not run | 1 | "pass --project" |
+| Unreadable `zkir/` directory on a 0.34.0 contract | mismatch | 2 | both real mismatches kept, unreadable path `WARN` |
+| `--skip-zk` build | no mismatch | 0 | ZKIR `SKIP` |
+| 0.31.1 contract with an unpinned runtime 0.20.0 | mismatch | 2 | loaded runtime; contract loads 0.20.0; v4 vs v3 on-chain runtime (fix text names the unpinned install) |
+| Stub RPC answering `result: null`, or a `null` body | no mismatch | 0 | node `WARN` bad response |
+| Stub proof server answering 200 with HTML | no mismatch | 0 | proof server `WARN` no version |
 | `--matrix <local file>` | works offline | 0 | — |
 | `BLOCKFROST_PROJECT_ID` set, Blockfrost refusing | no key in output | 0 | node `WARN` HTTP 403 |
 
-The Blockfrost success path (a valid token) was not tested.
+The Blockfrost success path (a valid token) was not tested. In review on #237, the script and the
+facts were re-checked independently on Linux with Node 24.16.0.
 
 ## Re-verify when versions move
 
@@ -138,7 +147,9 @@ The Blockfrost success path (a valid token) was not tested.
 - Which runtime each compiler pins (`checkRuntimeVersion` in the compiled `contract/index.js`),
   and which on-chain runtime package each `compact-runtime` depends on.
 - What midnight-js pins: `compact-runtime`, `compact-js`, `onchain-runtime-v3`, `ledger-v8`
-  (`npm view @midnight-ntwrk/midnight-js-protocol@<v> dependencies`).
+  (`npm view @midnight-ntwrk/midnight-js-protocol@<v> dependencies`). When midnight-js 5.0.0
+  (today's `rc`, on runtime 0.20.0, `onchain-runtime-v4` and the ledger-9 line) ships and a
+  network moves to it, the runtime and on-chain runtime expectations here change with it.
 - `wallet-sdk-facade` / `wallet-sdk-utilities` pairing, which scope's `latest` is current, and
   what testkit-js pins.
 - The proof server's ZKIR support (`POST /k` with a `.bzkir` from the new compiler) and the
