@@ -1,30 +1,30 @@
 # Runbook: Migrating a Midnight app from the official indexer/RPC to Blockfrost
 
-> **Mainnet (added 2026-09-30, updated 2026-10-07).** The official mainnet indexer and RPC
-> (`indexer.mainnet.midnight.network`, `rpc.mainnet.midnight.network`) are **scheduled to shut
-> down**. The announced time was 18:00 ET / 22:00 UTC on 2026-09-30, but both official indexers
-> (mainnet and preprod) were still answering on 2026-10-07 at ~13:00 UTC. Treat the shutdown as
-> imminent and migrate now. While the official indexer is still up, you can **measure your cursor
-> offset**: see the `check-indexer-cursor.mjs` bullet below.
+> **Mainnet and preprod (updated 2026-10-07).** The Midnight-hosted mainnet and preprod
+> indexer and RPC (`indexer.mainnet.midnight.network`, `rpc.mainnet.midnight.network`,
+> `indexer.preprod.midnight.network`, `rpc.preprod.midnight.network`) shut down on
+> **Friday 2026-10-09 at 18:00 ET / 22:00 UTC**. After that, indexer and RPC access for both
+> networks is through Blockfrost or your own indexer. Already on Blockfrost? Stay there.
+> Preview is unchanged for now. Everything below applies to both networks: the same URL swap
+> and `project_id` token, the same cursor break, the same progress lag. The worked case and
+> every measured number come from preprod, whose endpoints are in
+> [Key identifiers](#key-identifiers). On mainnet:
 >
-> Everything below applies to mainnet too: the same URL swap and `project_id` token, the same
-> cursor break, the same progress lag. The worked case and every measured number come from
-> preprod. On mainnet:
->
-> | Service | Official (shutting down) | Blockfrost |
+> | Service | Official (shuts down 2026-10-09) | Blockfrost |
 > |---|---|---|
 > | Indexer HTTP (GraphQL) | `https://indexer.mainnet.midnight.network/api/v4/graphql` | `https://midnight-mainnet.blockfrost.io/api/v0` |
 > | Indexer WS | `wss://indexer.mainnet.midnight.network/api/v4/graphql/ws` | `wss://midnight-mainnet.blockfrost.io/api/v0/ws` |
 > | Node RPC HTTP | `https://rpc.mainnet.midnight.network` | `https://rpc.midnight-mainnet.blockfrost.io` |
 > | Node RPC WS | `wss://rpc.mainnet.midnight.network` | `wss://rpc.midnight-mainnet.blockfrost.io` (same pattern as preprod; not yet verified on mainnet) |
 >
-> - **Create a separate Blockfrost project for Midnight Mainnet.** Tokens are per network,
->   so a preprod token gets `403` on mainnet. Append `?project_id=<token>` to every URL, as
->   in [Remediation](#remediation) step 1.
+> - **Create a Blockfrost project for each network you use (Midnight Mainnet, Midnight
+>   Preprod).** Tokens are per network, so a preprod token gets `403` on mainnet. Append
+>   `?project_id=<token>` to every URL, as in [Remediation](#remediation) step 1.
 > - **Only saved wallet state from the official indexer is at risk.** The cursor break needs
 >   both of these: a wallet that **persisted** its sync state while connected to the official
->   mainnet indexer (`serializeState()` output, a fast-sync/preseed bundle, or stored
->   ledger-event or transaction ids), **and** that state then resumed against Blockfrost.
+>   mainnet or preprod indexer (`serializeState()` output, a fast-sync/preseed bundle, or
+>   stored ledger-event or transaction ids), **and** that state then resumed against
+>   Blockfrost.
 >   Not affected:
 >   - wallet apps that already sync through Blockfrost, or run their own indexer: the
 >     shutdown doesn't change their indexer
@@ -32,27 +32,25 @@
 >   - apps that only read contract state (by address, block height or block hash) or submit
 >     transactions over RPC: these carry no indexer-issued ids
 >
->   The preprod id offsets (−22 ledger events, −30 transactions) have **not** been measured
->   on mainnet, and mainnet numbering may match. Until it's measured, treat affected saved
->   state as not portable. Don't shift cursors. If sync stalls with `values inserted
->   non-linearly…`, discard that wallet's saved state and re-sync it from genesis
->   ([Remediation](#remediation) step 2). A wallet that syncs cleanly needs no action.
+>   On preprod the offsets are measured (−22 ledger events, −30 transactions), so saved
+>   preprod state from the official indexer is known not to be portable. They have **not**
+>   been measured on mainnet, and mainnet numbering may match. Until it's measured, treat
+>   affected saved state as not portable. Don't shift cursors. If sync stalls with
+>   `values inserted non-linearly…`, discard that wallet's saved state and re-sync it from
+>   genesis ([Remediation](#remediation) step 2). A wallet that syncs cleanly needs no
+>   action.
 > - **Measure the offset before the shutdown if you can.** `check-indexer-cursor.mjs`
 >   compares two live indexers, so run it against mainnet (`--a-http`/`--a-ws` official,
->   `--b-*` Blockfrost) while the official indexer still answers. The full mainnet command is in
->   the [cursor-mismatch runbook](../wallet-sync-cursor-indexer-mismatch-runbook/wallet-sync-cursor-indexer-mismatch-runbook.md#diagnose).
->   Once the official indexer is gone the script can't help: use the stall symptom above instead.
-> - **Official-indexer cursors can break without a migration.** Saved state also broke on the
->   official endpoints after they were re-synced (mainnet ~2026-09-19, preprod ~2026-09-22;
->   `midnight-wallet#781`). See the
->   [cursor-mismatch runbook](../wallet-sync-cursor-indexer-mismatch-runbook/wallet-sync-cursor-indexer-mismatch-runbook.md).
+>   `--b-*` Blockfrost) before 18:00 ET on Friday 2026-10-09. Afterwards it can't help: use
+>   the stall symptom above instead.
 > - **Mainnet full-sync time is not measured.** Size sync timeouts generously, well above
 >   the 67 min measured on preprod.
 > - **Check endpoints and auth** with [Diagnose](#diagnose) step 1, using the mainnet URLs.
 >   `system_chain` should return `"Midnight Mainnet"`.
 
 Moving a preprod app off `indexer.preprod.midnight.network` / `rpc.preprod.midnight.network`
-and onto Blockfrost is mostly a URL swap plus a `project_id` token. There are two breaks:
+and onto Blockfrost is mostly a URL swap plus a `project_id` token. The preprod hosts shut
+down at the same time as mainnet, at 22:00 UTC on 2026-10-09. There are two breaks:
 
 - **Blockfrost numbers ledger events and transactions differently from the official
   indexer.** Any wallet sync cursor or fast-sync (preseed) bundle made against one indexer
@@ -67,8 +65,9 @@ _Compiled 2026-09-29 from a preprod migration of the `midnight-examples` hello-w
 and extended 2026-09-30 from migrating the whole repo (10 suites, the preseed cutter and
 the wallet minter) and running it against preprod node 1.0.400
 (`@midnight-ntwrk/wallet-sdk` 1.2.0, `@midnight-ntwrk/ledger-v8` 8.1.2, midnight-js and testkit-js 4.1.1).
-Event ids, offsets and schema fields are point-in-time. Re-run the diagnostic before
-asserting any of them. The Midnight ecosystem changes fast._
+Updated 2026-10-07 for the 9 October shutdown of the Midnight-hosted mainnet and preprod
+endpoints. Event ids, offsets and schema fields are point-in-time. Re-run the diagnostic
+before asserting any of them. The Midnight ecosystem changes fast._
 
 ---
 
@@ -213,7 +212,7 @@ request, and the SDK needs a real `wss://` node URL.
 
 - **Endpoints (preprod).** Verified with a real token on 2026-09-29.
 
-  | Service | Official (old) | Blockfrost (new) |
+  | Service | Official (shut down 2026-10-09) | Blockfrost (new) |
   |---|---|---|
   | Indexer HTTP (GraphQL) | `https://indexer.preprod.midnight.network/api/v4/graphql` | `https://midnight-preprod.blockfrost.io/api/v0` (`/api/v4/graphql` on the same host also answers; `/api/v0/graphql` is 404) |
   | Indexer WS | `wss://indexer.preprod.midnight.network/api/v4/graphql/ws` | `wss://midnight-preprod.blockfrost.io/api/v0/ws` (`graphql-transport-ws`) |
@@ -282,7 +281,10 @@ token in your environment, never on the command line or in a committed file.
    [`scripts/check-indexer-cursor.mjs`](scripts/check-indexer-cursor.mjs) (Node ≥ 22, no
    `npm install`, read-only). It probes the target endpoints, checks both indexers are on the
    same chain, then fetches the event at your cursor from both and compares payloads. When
-   they differ, it finds the same payload on the target and reports the id offset.
+   they differ, it finds the same payload on the target and reports the id offset. It needs
+   both indexers live. The default A (`indexer.preprod.midnight.network`) stops answering at
+   22:00 UTC on 2026-10-09, so from then on rely on the manifest host (`== 0. Manifest`,
+   below) and the stall symptom in [Symptom](#symptom).
 
    ```sh
    # A cursor you already have (e.g. the stuck appliedIndex from the sync log):
