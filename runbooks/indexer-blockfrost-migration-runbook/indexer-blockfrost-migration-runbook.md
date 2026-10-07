@@ -153,7 +153,11 @@ At compile time the offset was a constant −22 from 989781 to the tip (`maxId` 
 official vs 1575249 Blockfrost). The gap sits between blocks 1130986 (last id 989780) and
 1130996 (first id 989803 official, 989781 Blockfrost); the blocks between carry no dust or
 zswap events on either indexer, and every block hash matches. Why the official indexer skips
-those 22 ids is unconfirmed; tracked in `midnightntwrk/servicedesk#216`.
+those 22 ids is unconfirmed; tracked in `midnightntwrk/servicedesk#216`. The leading
+explanation comes from `midnight-wallet#781`. Preprod checkpoints saved before ~2026-09-22
+are off by exactly 22 against today's official indexer. So the hole most likely appeared
+when the official indexer was re-synced, and before that its numbering matched Blockfrost's.
+The indexer team has not confirmed this.
 
 Wallet sync resumes each ledger-event subscription from a stored event id
 (`dustLedgerEvents(id: $id)`, `zswapLedgerEvents(id: $id)` in
@@ -163,6 +167,12 @@ its generation tree, `DustLocalState.replayEventsWithChanges` rejects the out-of
 insert, and the sync layer retries the same batch forever. Shielded sync can reach
 `isStrictlyComplete()` from the same shifted cursor for an empty wallet. That shows only
 that no tree insert collided, not that the state is correct, so do not rely on it.
+
+The mechanism isn't specific to Blockfrost. Any change of the database behind a wallet
+(another provider, a re-sync of the same endpoint, blue/green) can break a saved cursor. The
+general mechanism, the timestamp-error variant and the remediations are in the
+[cursor-mismatch runbook](../wallet-sync-cursor-indexer-mismatch-runbook/wallet-sync-cursor-indexer-mismatch-runbook.md).
+This section keeps the offsets measured between the official indexer and Blockfrost.
 
 **Transaction ids are indexer numbering too.** The same funding transaction
 (`c9a01ee7…fd849706`, block 2770188) is id 632821 on the official indexer and 632791 on
@@ -414,7 +424,9 @@ anything.
 6. **Not recommended: shift cursors by the offset.** Subtracting 22 from every stored event
    id (or 30 from transaction ids) lines them up today. But the offsets come from the
    indexers numbering differently, and any future skip on either side silently changes
-   them. Treat cursors as bound to their indexer.
+   them. Treat cursors as bound to their indexer. A re-anchoring approach that checks each
+   candidate event against the saved state, with its caveats, is in the
+   [cursor-mismatch runbook](../wallet-sync-cursor-indexer-mismatch-runbook/wallet-sync-cursor-indexer-mismatch-runbook.md#remediation).
 
 **Browser DApps.** With the connector API, endpoints come from the user's wallet
 (`getConfiguration()` → `indexerUri`, `indexerWsUri`, `substrateNodeUri`), not from DApp
@@ -430,7 +442,8 @@ server-side proxy or a token scoped for public use.
   failed one assertion that doesn't depend on the indexer (202 passed, 1 skipped, 1
   failed); details are in that repo's `reports/node-1.0.400-regression.json`. The shared
   config is in `packages/fast-sync/src/config.ts`. Upstream tracking for the id gap:
-  `midnightntwrk/servicedesk#216`. Relevant files in that repo:
+  `midnightntwrk/servicedesk#216`; for the SDK cursor design:
+  `midnightntwrk/midnight-wallet#781`. Relevant files in that repo:
   `packages/fast-sync/src/config.ts` (the shared migrated config: `preprodConfig()`,
   `redactUrl()`);
   `packages/fast-sync/src/funding.ts` (funding gate without testkit `waitForFunds`);
@@ -454,7 +467,9 @@ server-side proxy or a token scoped for public use.
 - Official endpoints: <https://docs.midnight.network/guides/networks-and-environments>.
 - Open questions to settle before relying on this long-term:
   - Why the official preprod indexer skips ids 989781–989802, and whether more skips should
-    be expected (indexer team; `servicedesk#216`).
+    be expected (indexer team; `servicedesk#216`). `midnight-wallet#781` points to a re-sync
+    around 2026-09-22 on preprod, and to renumbering on mainnet (offset 13 since ~09-19, 37
+    for a 09-01 checkpoint).
   - Blockfrost request quotas for a full genesis sync (preprod event ids run to ~1.58M).
     On 2026-09-30 no request was rate-limited (no 429s) in a 67-min genesis cut plus
     ~2 h 10 min of test suites (26 fast-synced wallet builds, every suite's transactions
