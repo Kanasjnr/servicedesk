@@ -17,30 +17,7 @@ issue on behalf of a user vs. MNF/STL accounts triaging and authoring runbooks.
 | [Migrating from the official indexer/RPC to Blockfrost](indexer-blockfrost-migration-runbook/indexer-blockfrost-migration-runbook.md) | Switching mainnet (official endpoints scheduled to shut down; still answering 2026-10-07) or preprod to Blockfrost: URL and `project_id` changes, the event-id offsets measured between the official indexer and Blockfrost, preseed bundles, and "Wallet sync timeout" right after funding, because Blockfrost's indexer backs off unshielded progress updates on idle subscriptions; and how to tell which indexer a preseed bundle was cut against. |
 | [Batched deploy for oversized contracts](contract-batched-deploy-runbook/contract-batched-deploy-runbook.md) | Deploy fails with "exceeded block limit in transaction fee computation", or is rejected with RPC 1010 "Transaction would exhaust the block limits" (SDK: "Transaction submission error"), because every circuit's verifier key rides in the deploy and a tx may use only ~65% of the 50 KB/block `bytesWritten` limit. Fix: deploy a subset, then insert the remaining keys via maintenance updates. |
 | [Toolchain and package version mismatch](toolchain-version-mismatch-runbook/toolchain-version-mismatch-runbook.md) | Contract import, deploy or proving fails before submission ("Version mismatch: compiled code expects …", "Failed to configure constructor context with coin public key", "expected instance of ContractMaintenanceAuthority", "export named 'Clock'", proof server `400` on `/check`) because the compiler, runtime, wallet SDK or ZKIR format isn't the network-supported set (the newest compiler and runtime are ahead of every network), or the contract and midnight-js load different on-chain runtime copies. |
-| [Wallet sync stuck after the indexer changed](wallet-sync-cursor-indexer-mismatch-runbook/wallet-sync-cursor-indexer-mismatch-runbook.md) | Restored or saved wallet state fails its first sync update forever ("values inserted non-linearly into … tree", "received an event with a timestamp prior to the time already synced to"). The saved cursor is an indexer database id, so it breaks after a provider switch, a re-sync of the same endpoint, or blue/green. Not fixed by a ledger upgrade. |
-
-## Error-string lookup
-
-Triage shortcut: search the issue body or logs for these exact strings (a grep is enough).
-Symptoms overlap, so confirm the runbook's root cause before acting.
-
-| Error text (exact substring) | Runbook |
-|---|---|
-| `values inserted non-linearly into dust generation tree` | [Cursor mismatch](wallet-sync-cursor-indexer-mismatch-runbook/wallet-sync-cursor-indexer-mismatch-runbook.md) (and [Blockfrost](indexer-blockfrost-migration-runbook/indexer-blockfrost-migration-runbook.md) if the app just switched) |
-| `values inserted non-linearly into dust commitment tree` | [Cursor mismatch](wallet-sync-cursor-indexer-mismatch-runbook/wallet-sync-cursor-indexer-mismatch-runbook.md) |
-| `values inserted non-linearly into zswap commitment tree` | [Cursor mismatch](wallet-sync-cursor-indexer-mismatch-runbook/wallet-sync-cursor-indexer-mismatch-runbook.md) |
-| `received an event with a timestamp prior to the time already synced to` | [Cursor mismatch](wallet-sync-cursor-indexer-mismatch-runbook/wallet-sync-cursor-indexer-mismatch-runbook.md) |
-| `Missing project token. Please include project_id in your request.` / `Invalid project token.` | [Blockfrost](indexer-blockfrost-migration-runbook/indexer-blockfrost-migration-runbook.md) |
-| `Wallet sync timeout after 90000ms` with `unshielded=false` | [Blockfrost](indexer-blockfrost-migration-runbook/indexer-blockfrost-migration-runbook.md) |
-| `TypeError: Invalid URL` at wallet build (placeholder `nodeWS`) | [Blockfrost](indexer-blockfrost-migration-runbook/indexer-blockfrost-migration-runbook.md) |
-| `exceeded block limit in transaction fee computation` | [Batched deploy](contract-batched-deploy-runbook/contract-batched-deploy-runbook.md) |
-| `Transaction would exhaust the block limits` (RPC 1010) | [Batched deploy](contract-batched-deploy-runbook/contract-batched-deploy-runbook.md) |
-| `Version mismatch: compiled code expects` | [Toolchain mismatch](toolchain-version-mismatch-runbook/toolchain-version-mismatch-runbook.md) |
-| `Failed to configure constructor context with coin public key` | [Toolchain mismatch](toolchain-version-mismatch-runbook/toolchain-version-mismatch-runbook.md) |
-| `expected instance of ContractMaintenanceAuthority` | [Toolchain mismatch](toolchain-version-mismatch-runbook/toolchain-version-mismatch-runbook.md) |
-| `does not provide an export named 'Clock'` | [Toolchain mismatch](toolchain-version-mismatch-runbook/toolchain-version-mismatch-runbook.md) |
-| `Replicate Registrations Detected` | [cNIGHT→DUST duplicates](cnight-dust-duplicate-registration-runbook/cnight-dust-duplicate-registration-runbook.md) |
-| No error: `balanceUnboundTransaction` / `balanceTransaction` never returns, CPU-bound, RSS climbing | [Balancing hang](wallet-dust-balancing-hang-runbook/wallet-dust-balancing-hang-runbook.md) |
+| [Node rejection codes (1010 "Custom error: N")](node-1010-custom-error-runbook/node-1010-custom-error-runbook.md) | Submission fails with only `(FiberFailure) SubmissionError: Transaction submission error`. The node's reason, `1010: Invalid Transaction: Custom error: N`, is in `String(err)` and the `RPC-CORE` console line, not `err.message` (midnight-js contract calls do include it), and N depends on the node version (the docs' "Decode 1010 errors" page lists node 2.x codes; preview, preprod and mainnet run 1.0.400). Decoder script, and fixes for 182 intent TTL, 193 already on chain, 196 or `TransactionInvalidError` DUST already spent, 170 DUST proof, 168 fee checks, 186 effects check. |
 
 ## Conventions for adding a runbook
 
