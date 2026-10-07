@@ -7,62 +7,83 @@ tested. **The user runs it** on their own error text; it signs and submits nothi
 ## What the script reads
 
 | Input | Pattern | Output |
-| --- | --- | --- |
-| Ledger code | `Custom error: N` anywhere (RPC error, `String(err)`, `RPC-CORE` line, JSON) | name, category, a hint for codes with a reproduction or worked case, and what the code is on the other node line |
-| Pool error | `10xx: <Substrate message>[: data]` or `"code":10xx,"message":…` | the Substrate meaning; for 1010 without a number, the reason text |
-| Node log | `Rejected transaction <hash> from mempool: Transaction Error: …` or `… guaranteed execution would fail: …` | the code that variant maps to |
+|---|---|---|
+| Ledger code | `Custom error: N` anywhere (RPC error, `String(err)`, `RPC-CORE` line, JSON) | name, category, a hint for codes with a reproduction or worked case, and what the code is on the other node version |
+| Pool error | `10xx: <Substrate message>[: data]`, or a JSON-RPC error object in any key order (also escaped inside a JSON log line) | the Substrate meaning; for 1010 without a number, the reason text |
+| No-code wallet error | `Transaction is invalid and was rejected by the node`, `…got dropped…`, `…got usurped…`, a submission's `disconnected from ws://…: 1000:: Normal Closure` | what happened and what to do |
+| Node log | `Rejected transaction <hash> from mempool: …` (the node's error, or "guaranteed execution would fail: …") and `Rejecting transaction <hash> at pre-dispatch: …`; `Transaction malformed: …` detail lines | the code that line maps to; the detail text |
 | Bare number | 0-255 (ledger) or 1001-1021 (pool) | as above |
-| Wallet wrapper only | `Transaction submission error`, `SubmissionError`, `Unexpected error submitting scoped transaction` with no code | exit 2 and how to get the code out |
+| Wallet wrapper only | `Transaction submission error`, `SubmissionError`, `Unexpected error submitting scoped transaction` and nothing else | exit 2 and how to get the code out |
 
-The table comes from `--node 1.0|2.x`, or from `system_version` when given `--rpc`; without
-either it uses 1.0.x and says so. A `system_version` that is neither 1.0.x nor 2.x stops the
-script (exit 1) rather than decode against the wrong table.
+Input can be files, text arguments, numbers, or stdin (`-`, or piped with no arguments). Colour
+codes, a UTF-8 BOM and UTF-16LE files (PowerShell's default) are handled. The table comes from
+`--node 1.0|2.x`, or from `system_version` with `--rpc`, which also takes the wallet's `ws(s)://`
+URL; without either it uses 1.0.x and says so. A version that is neither 1.0.x nor 2.0/2.1 stops
+the script (exit 1) rather than decode against the wrong table; a 2.x build other than
+2.1.0-rc.4, or a 1.0.x newer than 1.0.400, gets a caution line. `BLOCKFROST_PROJECT_ID` is only
+sent to `blockfrost.io` hosts, and it and any `project_id` in a URL are redacted from the output.
 
 ## How the tables were made
 
-Not typed by hand. A parser read `impl From<LedgerApiError> for u8` from each file below into
-code → variant path, and the result was embedded in the script. A second check loads the tables
-back out of the script and compares them with the parsed source: 0 mismatches.
+Not typed by hand. [`gen-tables.mjs`](gen-tables.mjs) reads `impl From<LedgerApiError> for u8`
+(code → variant) and `impl core::fmt::Display for LedgerApiError` (log text → code) from a node
+`types.rs` and prints the consts the decoder embeds. Run on the two files below, its output is
+byte-identical to the tables in `decode-1010.mjs`. An independent parser built during the review
+agreed, and so did every code 0-255 in both tables, checked one by one. At run time the decoder
+renames the four variants the source imports under aliases
+(`Deserialization.DeserializationLedgerState` → `Deserialization.LedgerState`, and the same for
+`ContractAddress` and both `Serialization` ones).
 
-| Table | Source | Codes |
-| --- | --- | --- |
-| `NODE_1_0` | midnight-node tag `node-1.0.400` (`3acfd2edecdcd91373b6a506933f4c14ad3f0308`), `ledger/src/versions/common/types.rs` | 120 |
-| `NODE_2_X` | tag `node-2.1.0-rc.4` (`1b2b31c714f8986a082b8690f15e805981c771dd`), `ledger/src/ledger_8/types.rs` | 155 |
+| Table | Source | Codes | Display texts |
+|---|---|---|---|
+| `NODE_1_0`, `DISPLAY_1_0` | midnight-node tag `node-1.0.400` (`3acfd2edecdcd91373b6a506933f4c14ad3f0308`), `ledger/src/versions/common/types.rs` | 120 | 34 |
+| `NODE_2_X`, `DISPLAY_2_X` | tag `node-2.1.0-rc.4` (`1b2b31c714f8986a082b8690f15e805981c771dd`), `ledger/src/ledger_8/types.rs` | 155 | 36 |
 
-Same table, checked: `node-1.0.0`, `node-1.0.2`, `node-1.0.300` and `release/node-1.0.400` equal
-`node-1.0.400`; `ledger_9/types.rs` equals `ledger_8/types.rs` at `node-2.1.0-rc.4`, and both
-equal `main` at `b2f85e1626edb8dec8e49841e69f95943ec7b4e0`. `node-2.0.0-rc.4` differs only in
-lacking 140 (`SystemTransaction.NotAllowedForCaller`). The `SPLIT` map (which 2.x codes replace a
-1.0.x code) was checked the same way: every new code's name starts with the old code's name.
+Same table, checked: `node-1.0.0`, `node-1.0.1`, `node-1.0.2`, `node-1.0.300` and
+`release/node-1.0.400` equal `node-1.0.400`; `ledger_9/types.rs` equals `ledger_8/types.rs` at
+`node-2.1.0-rc.4`, and both equal `main` at `b2f85e1626edb8dec8e49841e69f95943ec7b4e0`.
+`node-2.0.0-rc.1` to `rc.4` have 154 codes, lacking only 140 (`SystemTransaction.NotAllowedForCaller`).
+The `SPLIT` map (which 2.x codes replace a 1.0.x code) was checked against both tables: every new
+code's name starts with the old code's name, or with the old name minus `Error` or `Failure`
+(182, 186, 187, 188). The catch-alls come from `ledger/src/versions/common/conversions.rs` at
+`node-1.0.400` (L48-51 and L137-139: unmapped ledger variants become `Invalid.UnknownError` 109
+or `Malformed.UnknownError` 139).
 
-The docs pages were compared with these tables by the same parser: `docs/nodes/error-codes.mdx`
-(midnight-docs `main`, last changed 2026-09-23) matches node 1.0.400 except that 211 is missing;
-`docs/troubleshoot/decode-1010-transaction-rejection-errors.mdx` matches node 2.x except that 140
-is missing, and marks 168, 182, 186, 187, 188, 193 and 205 as retired.
+The docs pages were compared with these tables by the same parser:
+`docs/nodes/error-codes.mdx` at `9c10c788d677519d4a5eaf70f7cc53419138da54` (2026-09-23) matches
+node 1.0.400 except that 211 is missing; `docs/troubleshoot/decode-1010-transaction-rejection-errors.mdx`
+at `1bd43d50d6feba0332bb3897cc21648bdf1d4794` (2026-08-12) matches node 2.x except that 140 is
+missing, and marks 168, 182, 186, 187, 188, 193 and 205 as retired.
 
-## Verified before hand-off (2026-10-06)
+## Verified before hand-off (2026-10-07)
 
 ### Reproductions
 
 Local network from `midnight-local-dev` (`902561d`) with `midnightntwrk/midnight-node:1.0.400`
 (`system_version` `1.0.400-87c0fbdb`), `indexer-standalone` 4.3.3 and `proof-server` 8.1.0;
 client `ledger-v8` 8.1.0, `wallet-sdk-facade` 4.1.0, `effect` 3.22.0, Node 24.20.0. The genesis
-wallet sent itself 1 NIGHT per case. Run twice, same results both times.
+wallet sent itself 1 NIGHT per case. `WalletFacade.submitTransaction` resolves only once the
+transaction is finalized (about 16 to 20 s here), so the "pending" cases start the first
+submission without awaiting it. The awaited cases ran twice (2026-10-06), the pending ones once
+(2026-10-07).
 
 | Case | Result | Node log |
-| --- | --- | --- |
+|---|---|---|
 | Intent TTL now - 5 min | `1010: Invalid Transaction: Custom error: 182` | `Intent TTL has expired. TTL: …, Current block: …`, then `Transaction Error: Malformed(TransactionApplicationError)` |
-| Intent TTL now + 30 days | `Custom error: 182` | `Intent TTL is too far in the future. TTL: Timestamp(1793912570), Maximum allowed: Timestamp(1792530186)`, about block time + 14 days |
+| Intent TTL now + 30 days | `Custom error: 182` | `Intent TTL is too far in the future. TTL: Timestamp(1793912570), Maximum allowed: Timestamp(1792530186)`, block time + 14 days |
 | Intent TTL now + 30 min | accepted | none |
-| Same finalized transaction again, at once | accepted, same id, in 11 and 19 ms | none |
-| Same transaction again after it was included (30 s) | `Custom error: 193` | `guaranteed execution would fail: ReplayProtectionViolation(IntentAlreadyExists)` |
-| Second wallet instance on the same seed spends the same DUST, before and after the first landed | `Custom error: 196` both times | `dust double spend …`, then `guaranteed execution would fail: DustDoubleSpend(DustNullifier(…))` |
-| Same expired transaction three times (at once, at once, after 5 s) | 182; then no code, stderr `disconnected from ws://127.0.0.1:9944/: 1000:: Normal Closure`; then 182 again | 1012 never appeared |
+| Same transaction again 1 s after the first submission, while it was pending | accepted; both calls resolved with the same id | none |
+| Same transaction again right after the first `submitTransaction` resolved (finalized) | accepted, same id, 19 ms | none |
+| Same transaction again 30 s after it was finalized | `Custom error: 193` | `… from mempool: guaranteed execution would fail: ReplayProtectionViolation(IntentAlreadyExists)` |
+| Second wallet instance on the same seed spends the same DUST 1 s after the first submission, while it was pending | no code: `[cause]: TransactionInvalidError: Transaction is invalid and was rejected by the node`, after 5.9 s; the first was accepted | `dust double spend …`, then `Rejecting transaction … at pre-dispatch: guaranteed execution would fail: DustDoubleSpend(DustNullifier(…))` |
+| Second wallet instance spends the same DUST after the first was finalized, and again 30 s later | `Custom error: 196` both times | `dust double spend …`, then `… from mempool: guaranteed execution would fail: DustDoubleSpend(…)` |
+| Same expired transaction three times (at once, at once, after 5 s) | 182; then no code, `[cause]: Error: disconnected from ws://127.0.0.1:9944/: 1000:: Normal Closure`; then 182 again; never 1012 | one rejection for the first, none for the immediate second (checked on the 2026-10-07 run) |
+| NIGHT transfer proved by `midnightntwrk/proof-server:8.0.3` (`/version` 8.0.3, one `POST /prove` logged) | accepted | none |
 
 What each way of printing the rejected error showed (expired-TTL case):
 
 | Expression | Has `Custom error: 182` |
-| --- | --- |
+|---|---|
 | `err.name` / `err.message` | no: `(FiberFailure) SubmissionError` / `Transaction submission error` |
 | `err.stack` | no |
 | `JSON.stringify(err)` | no |
@@ -73,43 +94,51 @@ What each way of printing the rejected error showed (expired-TTL case):
 
 ### Not reproduced
 
-- **Old proof server (8.0.3) to provoke 170:** the wallet never reached proving (no request at
-  either proof server in 15 minutes) and the run was stopped. 170 is documented from
+- **170:** a transfer proved by proof server 8.0.3 was accepted, so 170 is documented from
   `servicedesk#52` and `servicedesk#150` only.
 - 168, 186, 231, 232 and `Transaction would exhaust the block limits`: taken from the worked
   cases and the ledger source.
 - Browser consoles, the DApp Connector path and Midnight.js scoped transactions (the last from
   midnight-js 4.1.1 source: the message is built with `String(err)`).
-- A client clock that is off: from `wallet-sdk-facade` 4.1.0 source (`defaultTtl()` adds
-  `DEFAULT_TTL_MS`, 1 hour, to the wallet clock's now).
+- A client clock that is off: from source (`ttlOneHour()` in `midnight-js-utils` 4.1.1 is
+  `Date.now()` + 1 hour).
+- Separate seeds for parallel submissions (advice, not tested).
 
 ### Script test runs
 
+On Node 20.19.1, macOS, unless noted; 43 cases, all as expected.
+
 | Input | Exit | Output |
-| --- | --- | --- |
+|---|---|---|
 | reproduction log with 182, 193 and 196 `RPC-CORE` lines | 0 | all three decoded once each |
-| stderr of the `String(err)` run | 0 | 182 |
-| captured node log (9 lines) | 0 | `Malformed(TransactionApplicationError)` → 182, `Invalid(ReplayProtectionViolation(IntentAlreadyExists))` → 193, `Invalid(DustDoubleSpend(DustNullifier))` → 196; with `--node 2.x`: 244, 196, and no match for the 1.0.x-only variant |
-| `1010: Invalid Transaction: Custom error: 168: (FiberFailure) SubmissionError: …` (`servicedesk#100`) | 0 | 168, split into 231 and 232 on 2.x |
-| JSON-RPC envelope with `Custom error: 170` | 0 | 170 |
-| `RpcError: 1010: Invalid Transaction: Transaction would exhaust the block limits` | 0 | points at the batched deploy runbook |
-| `231` | 0 | not a 1.0.x code; 2.x `OutsideTimeToDismiss`; on 1.0.x the same failure is 168 |
-| `231 --node 2.x`, `182 --node 2.x` | 0 | decoded; 182 points at 228 to 230 |
-| `103` | 0 | 1.0.x name; 2.x `Invalid.Zswap.Unknown` and its splits |
-| `1010`, `1016` | 0 | envelope explanation; pool full |
-| `300`, `5000` | 1 | neither a ledger nor a pool code |
-| `SubmissionError: Transaction submission error` | 2 | no code; how to print `String(err)` |
-| empty stdin | 2 | no node rejection found |
-| `--rpc https://rpc.preprod.midnight.network`, `--rpc http://127.0.0.1:9944` | 0 | `1.0.400-c338b9ac`, `1.0.400-87c0fbdb`; 1.0.x table |
-| `--rpc` with `--node`, `--node 3`, `--rpc notaurl`, `--rpc http://127.0.0.1:1`, `--bogus` | 1 | one-line error |
-| Blockfrost preprod RPC with a fake `BLOCKFROST_PROJECT_ID` | 1 | `HTTP 403 (Blockfrost rejected BLOCKFROST_PROJECT_ID; tokens are per network)`; key not printed |
+| node log, awaited run (9 lines) | 0 | `Malformed(TransactionApplicationError)` → 182, `Invalid(ReplayProtectionViolation(IntentAlreadyExists))` → 193, `Invalid(DustDoubleSpend(DustNullifier))` → 196; with `--node 2.x`: 244, 196, and no match for the 1.0.x-only variant |
+| node log, pending run | 0 | pre-dispatch `DustDoubleSpend` → 196, with the note that the client got no code |
+| wallet stdout and stderr, pending run | 0 | 182, `TransactionInvalidError`, and the submission disconnect |
+| `servicedesk#100` text (168 plus the FiberFailure tail), `servicedesk#54` JSON envelope | 0 | 168, split into 231 and 232 on 2.x |
+| JSON with keys reordered; JSON escaped inside a JSON log line | 0 | 196; `Transaction is outdated` with the Substrate hint |
+| `servicedesk#225` text | 0 | points at the batched deploy runbook |
+| colour codes around the line; UTF-16LE file; stdin via `-` | 0 | decoded |
+| `1010: Invalid Transaction` with no data, bare `1010` | 0 | envelope explanation |
+| `1014: Priority is too low: (5 vs 7)` | 0 | pool meaning |
+| `Transaction is invalid and was rejected by the node`; a submission's `disconnected … Normal Closure` | 0 | the no-code explanations |
+| `subscribeRuntimeVersion … Normal Closure` (a normal shutdown line) | 2 | not mistaken for a failure |
+| node log `Error while getting transaction context`; `guaranteed execution would fail: DivideByZero` | 0 | 165; 109 as the node's catch-all |
+| `231`; `182 --node 2.x`; `225 --node 2.x` | 0 | cross-version pointers (168; 228 to 230; 187) |
+| `Custom error: 12`, `Custom error: 0x1a`, `{"code":1006,"message":"Abnormal Closure"}`, wrapper only | 2 | nothing explained; the wrapper case says how to get the code |
+| `300`; missing `./app.log`; a directory; `-n 2.x`; `--node 3`; `--rpc` with `--node`; `--rpc notaurl`; `--rpc http://127.0.0.1:1` | 1 | one-line error |
+| `--rpc` https and wss preprod, ws local node | 0 | `1.0.400-c338b9ac`, `1.0.400-87c0fbdb`; 1.0.x table |
+| a file named `182` | 0 | `182` is the code, `./182` the file |
+| 3,000 output blocks into a slow pipe | 0 | not truncated |
+| Blockfrost preprod RPC with a fake `BLOCKFROST_PROJECT_ID`; a local server checking where the key goes | 1 / 0 | `HTTP 403 (Blockfrost rejected the project token; tokens are per network)`, key not printed; not sent to a non-Blockfrost host |
+| Node 18.20.5 | 1 | refused |
 
 ## Re-verify when versions move
 
 - When a network upgrades its node, check `system_version`. If it reports 2.x, the decoder
-  already has the table, but check it against that release's `types.rs` (2.x was taken from a
-  release candidate), and swap the runbook's 1.0.x examples for their 2.x codes.
-- On a new node line (neither 1.0.x nor 2.x), regenerate the table from that tag's
-  `impl From<LedgerApiError> for u8` and re-run the parser check above.
+  already has the table, but check it against that release's `types.rs` with `gen-tables.mjs`
+  (2.x was taken from a release candidate), and swap the runbook's 1.0.x examples for their 2.x
+  codes.
+- On a new node line (neither 1.0.x nor 2.x), run `gen-tables.mjs` on that tag's `types.rs`, add
+  the output as a new table, and re-run the checks above.
 - Re-run the reproductions on a local network with the new node image: the 182, 193 and 196
   cases each take under a minute once the wallet has synced.
