@@ -1,10 +1,11 @@
 # Runbook: Node rejects a transaction ("1010: Invalid Transaction: Custom error: N")
 
-A transaction is built, proved and balanced, and the node turns it away at submission. The DApp
-sees only `Transaction submission error`. The node's reason, `Custom error: N`, is two causes
-down the error chain, where `err.message` doesn't reach. Find the `RPC-CORE:
-submitAndWatchExtrinsic` line already in your console (or print `String(err)`), decode N with the
-script below, and match it to a fix. The numbers depend on the node version. Node 2.x drops or
+A transaction is built, proved and balanced, and the node turns it away at submission. Called
+through the wallet SDK (or midnight-js `submitTx`), the DApp sees only `Transaction submission
+error`: the node's reason, `Custom error: N`, is two causes down the error chain, where
+`err.message` doesn't reach. Midnight.js contract calls do put it in `err.message`. Find the
+`RPC-CORE: submitAndWatchExtrinsic` line already in your console (or print `String(err)`), decode N
+with the script below, and match it to a fix. The numbers depend on the node version. Node 2.x drops or
 renames ten of node 1.0.x's codes, and the docs' "Decode 1010 errors" page lists the 2.x table,
 although preview, preprod and mainnet run node 1.0.400.
 
@@ -57,15 +58,25 @@ marked otherwise.
   ```
 
 - **The console has the code even when the DApp swallows the error** (→ Diagnose 1). The RPC
-  client logs this to stderr on every rejection:
+  client logs this to stderr on every rejection, twice per rejection (two lines are one failure,
+  not a retry):
 
   ```text
   RPC-CORE: submitAndWatchExtrinsic(extrinsic: Extrinsic): ExtrinsicStatus:: 1010: Invalid Transaction: Custom error: 196
   ```
 
-- **Midnight.js scoped transactions** put the same chain into their message (→ Diagnose 1):
-  `Unexpected error submitting scoped transaction '<name>': (FiberFailure) SubmissionError: …`
-  (midnight-js 4.1.1 builds it with `String(err)`; from source, not reproduced).
+- **Midnight.js contract calls** (`deployed.callTx.<circuit>()`, plain or inside
+  `withContractScopedTransaction`) reject with the whole chain in `err.message`, and `err.cause` is
+  the wallet's `FiberFailure` (→ Diagnose 2):
+
+  ```text
+  Error: Unexpected error submitting scoped transaction '<unnamed>': (FiberFailure) SubmissionError: Transaction submission error
+    …
+      [cause]: RpcError: 1010: Invalid Transaction: Custom error: 182
+  ```
+
+  Reproduced with midnight-js 4.1.1 on a deployed counter contract. midnight-js `submitTx` passes
+  the wallet's error on unchanged (`servicedesk#225`).
 - **A client that shows the raw JSON-RPC response** (→ Diagnose 2; from `servicedesk#54`, not
   reproduced):
 
@@ -164,7 +175,10 @@ error codes page for preview, preprod and mainnet until they move to 2.x.
 
 **Malformed or Invalid.** A `Malformed` code is about the transaction as built (structure,
 proofs, signatures, balance, TTL, fees). An `Invalid` code is about the ledger state it met
-(already spent, already on chain), so the question is what got there first.
+(already spent, already on chain), so the question is what got there first. The TTL is checked
+in both places: the well-formedness check gives 182 (228 or 229 on 2.x), and replay protection
+against ledger state gives 193 (242 or 243 on 2.x). Both TTL cases reproduced on node 1.0.400,
+expired and 30 days ahead, came back as 182, from the first check.
 
 ## Key identifiers
 
@@ -177,7 +191,8 @@ proofs, signatures, balance, TTL, fees). An `Invalid` code is about the ledger s
   `Invalid`, 110-139 and 166-192 `Malformed`, 150-155 and 165 node ledger API, 201-211 system
   transactions, 255 host API. The tables themselves are linked under Reference material.
 - **Node version:** JSON-RPC `system_version`. `1.0.400-c338b9ac` on preview, preprod and
-  mainnet on 2026-10-07 (the build hash isn't a public commit); the
+  mainnet on 2026-10-07 (the build hash isn't a public commit), and `2.0.0-d9729c13` on stagenet,
+  a 2.0.0 build with no public tag, so its table is assumed to be 2.0.0-rc.x's; the
   `midnightntwrk/midnight-node:1.0.400` image reports `1.0.400-87c0fbdb`, with the same table.
   `rpc.<network>.midnight.network` answered without a key on 2026-10-07; for their shutdown and
   Blockfrost's project token, see the
@@ -195,8 +210,10 @@ proofs, signatures, balance, TTL, fees). An `Invalid` code is about the ledger s
   registrations and fee estimates). Midnight.js uses `ttlOneHour()`, the machine clock + 1 hour
   (`midnight-js-utils` 4.1.1), for deploy and call intents, and testkit-js's `balanceTx` defaults
   to it.
-- **Transaction id:** `WalletFacade.submitTransaction` resolves only once the transaction is
-  finalized, and returns `tx.identifiers().at(-1)`, which you can read before submitting.
+- **Transaction id and timing:** `WalletFacade.submitTransaction` resolves only once the
+  transaction is finalized, and returns `tx.identifiers().at(-1)`, which you can read before
+  submitting. That took 14 to 22 s on the local network. Preprod and mainnet made a block every
+  6 s and finalized 2 to 3 blocks behind (measured 2026-10-07).
 
 ## Diagnose (no API key)
 
@@ -240,8 +257,8 @@ proofs, signatures, balance, TTL, fees). An `Invalid` code is about the ledger s
      against.
      The DUST that pays the fee is already spent on chain. Reproduced on node 1.0.400 with two wallet
      instances on one seed: the second transaction got 196 once the first was in a block. Fix: one
-     wallet instance per seed, and wait until the last transaction is on chain and the wallet has
-     synced it before building the next one.
+     wallet instance per seed (one instance built and submitted two transfers back to back without a
+     conflict); with several processes, send every submission through the one that holds the wallet.
    ```
 
    A code that only exists on the other node version gets a pointer instead:
@@ -262,54 +279,66 @@ proofs, signatures, balance, TTL, fees). An `Invalid` code is about the ledger s
      https://rpc.preprod.midnight.network
    ```
 
-4. **Match it to a cause.** The failures that come up in practice, on node 1.0.x:
+4. **Match it to a cause.** The failures that come up in practice:
 
-   | Code | Name | What happened | Seen in | Fix |
-   |---|---|---|---|---|
-   | 182 | `Malformed.TransactionApplicationError` | Intent TTL expired or too far ahead, or the intent already exists; the node log says which | reproduced; `servicedesk#235` (the same text in a node log) | Remediation 1 |
-   | 193 | `Invalid.ReplayProtectionViolation` | Replay protection against ledger state; in practice the transaction was submitted again after it landed | reproduced | Remediation 2 |
-   | 196 | `Invalid.DustDoubleSpend` | The DUST paying the fee is already spent on chain | reproduced | Remediation 3 |
-   | none | `TransactionInvalidError` | Rejected when the block was built, e.g. the same DUST spent twice while both were pending | reproduced | Remediation 3 |
-   | 170 | `Malformed.InvalidDustSpendProof` | The DUST spend proof didn't verify, which is as likely a disagreement on DUST state as a bad proof | `servicedesk#150`, `servicedesk#52` | Remediation 4 |
-   | 168 | `Malformed.FeeCalculation` | Too slow to validate for its size, or too big for a block | `servicedesk#100` | Remediation 5 |
-   | 186 | `Malformed.EffectsCheckFailure` | The transaction's effects don't match what its contract calls claim | `servicedesk#37` | Remediation 6 |
+   | 1.0.x code | 2.x code | Name on 1.0.x | What happened | Seen in | Fix |
+   |---|---|---|---|---|---|
+   | 182 | 228, 229 | `Malformed.TransactionApplicationError` | Intent TTL expired or too far ahead (the node log says which) | reproduced; `servicedesk#235` (the same text in a node log) | Remediation 1 |
+   | 193 | 242, 243 | `Invalid.ReplayProtectionViolation` | Intent TTL expired or too far ahead, checked against ledger state | from source | Remediation 1 |
+   | 193 | 244 | `Invalid.ReplayProtectionViolation` | The transaction was submitted again after it landed | reproduced | Remediation 2 |
+   | 196 | 196 | `Invalid.DustDoubleSpend` | The DUST paying the fee is already spent on chain | reproduced | Remediation 3 |
+   | none | none | `TransactionInvalidError` | Rejected when the block was built, e.g. the same DUST spent twice while both were pending | reproduced | Remediation 3 |
+   | 170 | 170 | `Malformed.InvalidDustSpendProof` | The DUST spend proof didn't verify, which is as likely a disagreement on DUST state as a bad proof | `servicedesk#150`, `servicedesk#52` | Remediation 4 |
+   | 168 | 231, 232 | `Malformed.FeeCalculation` | Too slow to validate for its size, or too big for a block | `servicedesk#100`, `servicedesk#117` | Remediation 5 |
+   | 186 | 212 to 218 | `Malformed.EffectsCheckFailure` | The transaction's effects don't match what its contract calls claim | `servicedesk#37` | Remediation 6 |
 
-   On node 2.x look for their successors (table under Root cause). Anything else → Remediation 7.
+   On node 1.0.x, 182 and 193 can each carry all three cases (TTL expired, TTL too far ahead,
+   intent already exists), because both wrap the ledger's `TransactionApplicationError`. In the
+   reproductions, TTL failures came back as 182 and a resubmitted transaction that had landed as
+   193. Anything else → Remediation 7.
 
 ## Remediation
 
 1 to 3 were reproduced; 4 to 6 come from worked cases.
 
-1. **TTL (182; 228, 229, 242 and 243 on 2.x).** Build the transaction again and submit it
-   promptly, with a TTL a little in the future. Now + 30 minutes was accepted; now - 5 minutes
-   and now + 30 days were rejected (the local node allowed up to block time + 14 days). The TTL
-   is whatever your code passes as `ttl`, or midnight-js's `ttlOneHour()`. Both come from the
-   client's clock, so a clock that's behind by more than an hour produces expired TTLs (from
-   source, not reproduced). On a public network you won't see the node log: compare the `ttl`
-   you passed with the time you submitted, and if that was fine, 182 can also mean the intent
-   already exists (Remediation 2).
+1. **TTL (182 or 193; 228, 229, 242 and 243 on 2.x).** Build the transaction again and submit
+   it promptly, with a TTL a little in the future. On node 1.0.400, now + 30 minutes was
+   accepted, a midnight-js call with the default TTL went through after an expired one failed,
+   and now - 5 minutes and now + 30 days were rejected. The local node allowed up to block time +
+   14 days; the public networks' limit wasn't checked, and the node's RPC has no method that
+   returns it. The TTL is whatever your code passes as `ttl`, or midnight-js's `ttlOneHour()`.
+   Both come from the client's clock, so a clock that's behind by more than your margin (an hour
+   with `ttlOneHour()`) produces expired TTLs (from source, not reproduced). On a public network
+   you won't see the node log: compare the `ttl` you passed with the time you submitted. A
+   resubmitted transaction that already landed gets 193 instead (Remediation 2).
 
-   *Trade-off:* a signed transaction that waits (offline signing, a queue) can expire; build it
-   close to submission.
-2. **Already on chain (193; 230 and 244 on 2.x).** The transaction landed, and usually a retry
+   *Trade-off:* a signed transaction that waits (offline signing, a job queue, a co-signing
+   window) can expire, and a TTL can't hold a long window open. Keep the window under the limit,
+   or have everyone sign the final transaction close to submission.
+2. **Already on chain (193; 244 on 2.x).** The transaction landed, and usually a retry
    resubmitted it. Submitting the same transaction again while it was still pending was harmless:
    both calls resolved with the same id. After it was in a block, the same resubmission got 193.
-   Keep the id before the first submission (`tx.identifiers().at(-1)` on the finalized
-   transaction is what `submitTransaction` returns), and before retrying, check whether it's on
-   chain. With midnight-js, race `publicDataProvider.watchForTxData(txId)` against a timeout of a
-   few blocks, because it never times out on its own. Treat 193 after a retry as "the first one
-   went through", and build a new transaction for a real retry.
+   `submitTransaction` itself takes 14 to 22 s to resolve, so a retry timeout shorter than that
+   fires on healthy submissions. Keep the id before the first submission:
+   `tx.identifiers().at(-1)` on the transaction `finalizeRecipe` returned is the id
+   `submitTransaction` returns (checked). Before retrying, check whether it's on chain. With
+   midnight-js, race `publicDataProvider.watchForTxData(txId)` against a timeout, because it never
+   times out on its own: for a landed id it resolved, for one that never landed it waited until
+   the 30 s timeout. Without midnight-js, look the id up on the indexer (not covered here). Treat
+   193 after a retry as "the first one went through", and build a new transaction for a real
+   retry.
 
    *Trade-off:* safe retries mean storing the id before the first submission.
 3. **DUST already spent (196, or `TransactionInvalidError` with no code).** Run one wallet
    instance per seed. Two instances on one seed built from the same state picked the same DUST:
    while the first transaction was pending, the second was dropped when the block was built
-   (`TransactionInvalidError`), and once the first was in a block, the same spend got 196. Wait
-   until the last transaction is on chain (`submitTransaction` resolves at finalization) and the
-   wallet has synced it before building the next one from another instance.
+   (`TransactionInvalidError`), and once the first was in a block, the same spend got 196. One
+   instance doesn't do this: it built two transfers back to back and submitted them a second
+   apart, and built the next one right after the previous one finalized, and all went through. With
+   several processes, send every submission through the one process that holds the wallet.
 
-   *Trade-off:* that serializes submissions per seed. Separate wallets (seeds), each with its own
-   DUST, would allow parallel submissions (not tested).
+   *Trade-off:* one submitter per seed. Separate wallets (seeds), each with its own DUST, would
+   allow independent submitters (not tested).
 4. **DUST spend proof (170).** Let the wallet finish syncing and build again. If every
    transaction on the network gets 170, faucet included, the problem is on the network's side, not
    in the DApp: open a servicedesk issue. In `servicedesk#150` (stagenet, ledger v9) it was an

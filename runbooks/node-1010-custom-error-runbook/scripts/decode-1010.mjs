@@ -297,12 +297,13 @@ const CATEGORY = {
 // What the codes people actually hit mean in practice, and what to do. Only codes with a
 // reproduction or a worked servicedesk case are here; the rest get their name and category.
 const TTL_FIX =
-  "Fix: build the transaction again with a TTL a little in the future (now + 30 minutes was accepted), and don't submit a transaction built long ago.";
-const TTL_182 = `Intent TTL expired, TTL too far in the future, or intent already exists. The node log says which and gives the times ("Intent TTL has expired. TTL: …, Current block: …" or "Intent TTL is too far in the future. TTL: …, Maximum allowed: …"). Reproduced on node 1.0.400 with a TTL 5 minutes in the past and one 30 days ahead. ${TTL_FIX}`;
+  "Fix: build the transaction again with a TTL a little in the future (now + 30 minutes was accepted on node 1.0.400), and don't submit a transaction built long ago.";
+const TTL_182 = `Intent TTL expired, TTL too far in the future, or intent already exists. The node log says which and gives the times ("Intent TTL has expired. TTL: …, Current block: …" or "Intent TTL is too far in the future. TTL: …, Maximum allowed: …"). Reproduced on node 1.0.400 with a TTL 5 minutes in the past and one 30 days ahead. On a public network you won't see the node log: compare the ttl you passed with when you submitted. ${TTL_FIX}`;
 const REPLAY_193 =
   'Replay protection, checked against ledger state; it covers an expired TTL, a TTL too far ahead and an intent that is already on chain. Reproduced on node 1.0.400 by submitting a transaction again after it was included (node log: "guaranteed execution would fail: ReplayProtectionViolation(IntentAlreadyExists)"). The common cause is a retry that resubmits a transaction that already landed: check whether the first one is on chain before retrying, and build a new transaction for a real retry.';
-const DUST_196 =
-  'The DUST that pays the fee is already spent on chain. Reproduced on node 1.0.400 with two wallet instances on one seed: the second transaction got 196 once the first was in a block. Fix: one wallet instance per seed, and wait until the last transaction is on chain and the wallet has synced it before building the next one.';
+const DUST_FIX =
+  'Fix: one wallet instance per seed (one instance built and submitted two transfers back to back without a conflict); with several processes, send every submission through the one that holds the wallet.';
+const DUST_196 = `The DUST that pays the fee is already spent on chain. Reproduced on node 1.0.400 with two wallet instances on one seed: the second transaction got 196 once the first was in a block. ${DUST_FIX}`;
 const DUST_170 =
   "The DUST spend proof that pays the fee did not verify. The ledger's own text: \"this is just as likely a disagreement on dust state on the declared time as the proof being invalid\". Let the wallet finish syncing and build again. If every transaction on the network gets 170, faucet included, the problem is on the network's side, not in the DApp (servicedesk#150, stagenet: an indexer bug). In servicedesk#52 a client on ledger-v8 8.0.3 got 170 on preprod while 8.1.0 deployed; the cause wasn't established.";
 const DISMISS_TEXT = '"exceeded the maximum time to dismiss for transaction size"';
@@ -324,8 +325,8 @@ const HINTS = {
     230: 'Intent already exists. On node 1.0.x this was 182.',
     231: `Node log: ${DISMISS_TEXT}. The transaction would take longer to validate than its size allows. servicedesk#117 (node 2.0.0-rc.4): contract calls that use unshielded-token effects. On node 1.0.x this was 168 (servicedesk#100, a swap that gained a third intent).`,
     232: `Node log: ${BLOCK_TEXT}. Too big for one block; for a contract deploy, see the contract-batched-deploy runbook. On node 1.0.x this was 168.`,
-    242: `Replay protection, checked against ledger state: intent TTL expired. On node 1.0.x this was 193. ${TTL_FIX}`,
-    243: `Replay protection, checked against ledger state: intent TTL too far in the future. On node 1.0.x this was 193. ${TTL_FIX}`,
+    242: `Replay protection, checked against ledger state: intent TTL expired (the well-formedness check, 228, usually catches this first). On node 1.0.x this was 193. ${TTL_FIX}`,
+    243: `Replay protection, checked against ledger state: intent TTL too far in the future (the well-formedness check, 229, usually catches this first). On node 1.0.x this was 193. ${TTL_FIX}`,
     244: 'Replay protection, checked against ledger state: this intent is already on chain. On node 1.0.x this was 193, reproduced there by submitting a transaction again after it was included. Check whether the first one is on chain before retrying, and build a new transaction for a real retry.',
   },
 };
@@ -357,7 +358,7 @@ const CUSTOM_RE = /Custom error: (\d{1,6})(?![\dxX])/g;
 const NO_CODE = [
   [
     /Transaction is invalid and was rejected by the node/,
-    'TransactionInvalidError: the node accepted the transaction into its pool and rejected it later, so no code reaches the client. Reproduced on node 1.0.400 with two wallet instances on one seed spending the same DUST while the first transaction was still pending: the node log said "Rejecting transaction … at pre-dispatch: guaranteed execution would fail: DustDoubleSpend(…)". If you run the node, its log has the reason; otherwise treat it like 196.',
+    `TransactionInvalidError: the node accepted the transaction into its pool and rejected it later, so no code reaches the client. Reproduced on node 1.0.400 with two wallet instances on one seed spending the same DUST while the first transaction was still pending: the node log said "Rejecting transaction … at pre-dispatch: guaranteed execution would fail: DustDoubleSpend(…)". If you run the node, its log has the reason. ${DUST_FIX}`,
   ],
   [/Transaction got dropped, the mempool likely is full/, 'TransactionDroppedError: the node dropped the transaction from its pool. Retry later.'],
   [/Transaction got usurped/, 'TransactionUsurpedError: another transaction replaced this one in the pool.'],

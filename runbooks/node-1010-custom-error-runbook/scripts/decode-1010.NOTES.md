@@ -63,9 +63,10 @@ Local network from `midnight-local-dev` (`902561d`) with `midnightntwrk/midnight
 (`system_version` `1.0.400-87c0fbdb`), `indexer-standalone` 4.3.3 and `proof-server` 8.1.0;
 client `ledger-v8` 8.1.0, `wallet-sdk-facade` 4.1.0, `effect` 3.22.0, Node 24.20.0. The genesis
 wallet sent itself 1 NIGHT per case. `WalletFacade.submitTransaction` resolves only once the
-transaction is finalized (about 16 to 20 s here), so the "pending" cases start the first
-submission without awaiting it. The awaited cases ran twice (2026-10-06), the pending ones once
-(2026-10-07).
+transaction is finalized (14 to 22 s here), so the "pending" cases start the first submission
+without awaiting it. The awaited cases ran twice (2026-10-06), the pending and midnight-js ones
+once (2026-10-07). On 2026-10-07 preprod and mainnet made 10 blocks a minute and finalized 2 to 3
+blocks behind (`chain_getHeader`, `chain_getFinalizedHead`).
 
 | Case | Result | Node log |
 |---|---|---|
@@ -79,6 +80,14 @@ submission without awaiting it. The awaited cases ran twice (2026-10-06), the pe
 | Second wallet instance spends the same DUST after the first was finalized, and again 30 s later | `Custom error: 196` both times | `dust double spend …`, then `… from mempool: guaranteed execution would fail: DustDoubleSpend(…)` |
 | Same expired transaction three times (at once, at once, after 5 s) | 182; then no code, `[cause]: Error: disconnected from <local node>: 1000:: Normal Closure`; then 182 again; never 1012 | one rejection for the first, none for the immediate second (checked on the 2026-10-07 run) |
 | NIGHT transfer proved by `midnightntwrk/proof-server:8.0.3` (`/version` 8.0.3, one `POST /prove` logged) | accepted | none |
+| midnight-js 4.1.1: `deployContract` of a counter (compiler 0.31.1, compact-runtime 0.16.0) | deployed | none |
+| midnight-js `callTx.increment()`, with testkit-js's `balanceTx` given a TTL 5 minutes in the past | `Error: Unexpected error submitting scoped transaction '<unnamed>': (FiberFailure) SubmissionError: …`; `err.message` contains `Custom error: 182`; `err.cause` is the `FiberFailure` | `Transaction Error: Malformed(TransactionApplicationError)` |
+| the same call inside `withContractScopedTransaction(…, { scopeName: 'bump' })` | the same, with `'bump'` | the same |
+| the same call again with the default TTL (`ttlOneHour()`) | accepted | none |
+| `tx.identifiers().at(-1)` read before submitting vs `submitTransaction`'s result | equal | none |
+| `watchForTxData(id)` raced with a timeout: landed id; id of a transaction never submitted | resolved (`SucceedEntirely`); still waiting at the 30 s timeout | none |
+| One wallet instance: two transfers built back to back from the same state, submitted 1 s apart | both accepted | none |
+| One wallet instance: next transfer built right after the previous `submitTransaction` resolved, no sync wait | accepted | none |
 
 What each way of printing the rejected error showed (expired-TTL case):
 
@@ -98,15 +107,20 @@ What each way of printing the rejected error showed (expired-TTL case):
   `servicedesk#52` and `servicedesk#150` only.
 - 168, 186, 231, 232 and `Transaction would exhaust the block limits`: taken from the worked
   cases and the ledger source.
-- Browser consoles, the DApp Connector path and Midnight.js scoped transactions (the last from
-  midnight-js 4.1.1 source: the message is built with `String(err)`).
+- Browser consoles and the DApp Connector path.
+- A deploy rejected through midnight-js (`deployContract` and `submitTx` pass the wallet's error
+  on unchanged per `servicedesk#225`).
+- The public networks' TTL limit: the node's RPC has no method for ledger parameters (`rpc_methods`
+  on preprod lists `midnight_apiVersions`, `contractState`, `ledgerStateRoot`, `ledgerVersion` and
+  `zswapStateRoot`). Also 242 or 243 on any node (on node 1.0.400 both TTL cases
+  were caught by the well-formedness check as 182).
 - A client clock that is off: from source (`ttlOneHour()` in `midnight-js-utils` 4.1.1 is
   `Date.now()` + 1 hour).
-- Separate seeds for parallel submissions (advice, not tested).
+- Separate seeds for independent submitters (advice, not tested).
 
 ### Script test runs
 
-On Node 20.19.1, macOS, unless noted; 43 cases, all as expected.
+On Node 20.19.1, macOS, unless noted; 47 cases, all as expected.
 
 | Input | Exit | Output |
 |---|---|---|
@@ -114,6 +128,7 @@ On Node 20.19.1, macOS, unless noted; 43 cases, all as expected.
 | node log, awaited run (9 lines) | 0 | `Malformed(TransactionApplicationError)` → 182, `Invalid(ReplayProtectionViolation(IntentAlreadyExists))` → 193, `Invalid(DustDoubleSpend(DustNullifier))` → 196; with `--node 2.x`: 244, 196, and no match for the 1.0.x-only variant |
 | node log, pending run | 0 | pre-dispatch `DustDoubleSpend` → 196, with the note that the client got no code |
 | wallet stdout and stderr, pending run | 0 | 182, `TransactionInvalidError`, and the submission disconnect |
+| midnight-js scoped-call error (`String(err)`), its stderr, and the node log of that run | 0 | 182 each |
 | `servicedesk#100` text (168 plus the FiberFailure tail), `servicedesk#54` JSON envelope | 0 | 168, split into 231 and 232 on 2.x |
 | JSON with keys reordered; JSON escaped inside a JSON log line | 0 | 196; `Transaction is outdated` with the Substrate hint |
 | `servicedesk#225` text | 0 | points at the batched deploy runbook |
@@ -123,7 +138,7 @@ On Node 20.19.1, macOS, unless noted; 43 cases, all as expected.
 | `Transaction is invalid and was rejected by the node`; a submission's `disconnected … Normal Closure` | 0 | the no-code explanations |
 | `subscribeRuntimeVersion … Normal Closure` (a normal shutdown line) | 2 | not mistaken for a failure |
 | node log `Error while getting transaction context`; `guaranteed execution would fail: DivideByZero` | 0 | 165; 109 as the node's catch-all |
-| `231`; `182 --node 2.x`; `225 --node 2.x` | 0 | cross-version pointers (168; 228 to 230; 187) |
+| `231`; `182 --node 2.x`; `225 --node 2.x`; `243 --node 2.x` | 0 | cross-version pointers (168; 228 to 230; 187; 193) |
 | `Custom error: 12`, `Custom error: 0x1a`, `{"code":1006,"message":"Abnormal Closure"}`, wrapper only | 2 | nothing explained; the wrapper case says how to get the code |
 | `300`; missing `./app.log`; a directory; `-n 2.x`; `--node 3`; `--rpc` with `--node`; `--rpc notaurl`; `--rpc http://127.0.0.1:1` | 1 | one-line error |
 | `--rpc` https and wss preprod, ws local node | 0 | `1.0.400-c338b9ac`, `1.0.400-87c0fbdb`; 1.0.x table |
