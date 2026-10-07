@@ -12,38 +12,59 @@ This happens whenever the indexer behind a wallet changes:
   [Blockfrost migration runbook](../indexer-blockfrost-migration-runbook/indexer-blockfrost-migration-runbook.md).
 - **The operator re-syncs or replaces the database behind the same URL.** Nothing changes on
   your side; the wallet just breaks one day (`midnight-wallet#781`).
-- **Load balancing or blue/green between two indexer databases.** This is a hypothesis for
-  `midnight-wallet#643`, not confirmed.
+- **Load balancing or blue/green between two indexer databases.** Plausible, but no case is
+  confirmed. `midnight-wallet#643` (preprod faucet on `indexer-preprod-blue`) is *possibly*
+  related, but it doesn't fit cleanly. Its errors were intermittent and the faucet recovered
+  between them. They also appeared during a cold replay with no saved cursor. And a faucet
+  release with "the fix" (0.14.0-rc.2, contents unknown) was named in the thread. Don't cite
+  #643 as this mechanism until that fix is known.
 
-_Compiled 2026-10-02 from `midnight-wallet#781`, `servicedesk#216` and the Blockfrost
-migration runbook. Source read at `@midnight-ntwrk/wallet-sdk-dust-wallet` 4.2.0 and
-5.0.0-rc.0, and `midnight-ledger` tags `ledger-8.1.0` and `ledger-8.1.3`. Ids, offsets and
-versions are point-in-time. Re-verify before asserting them._
+_Compiled 2026-10-02, updated 2026-10-07, from `midnight-wallet#781`, `servicedesk#216` and
+the Blockfrost migration runbook. Source read at `@midnight-ntwrk/wallet-sdk-dust-wallet`
+4.2.0 and 5.0.0-rc.0, `@midnight-ntwrk/wallet-sdk-shielded` 3.0.1 and 4.0.0-rc.1, and
+`midnight-ledger` tags `ledger-8.1.0` and `ledger-8.1.3`. Ids, offsets and versions are
+point-in-time. Re-verify before asserting them._
 
 ---
 
 ## Symptom
 
-- Shielded and unshielded sync may complete, but **dust stays at the same `appliedIndex`**,
-  and the SDK logs the same error on every retry:
+- One sub-wallet stays at the same `appliedIndex` while the others may complete, and the SDK
+  logs the same error on every retry. The tree name tells you which wallet is stuck:
+  - `dust generation tree` / `dust commitment tree`: the **dust** wallet, thrown from
+    `DustLocalState.replayEventsWithChanges`, resuming from `dustLedgerEvents`.
 
-  ```
-  Wallet.Other: Error while applying sync update
-  [cause]: Error: values inserted non-linearly into dust commitment tree; expected to insert index 118195, but received 118183.
-      at DustLocalState.replayEventsWithChanges (…/@midnight-ntwrk/ledger-v8/midnight_ledger_wasm_bg.js)
-  ```
+    ```
+    Wallet.Other: Error while applying sync update
+    [cause]: Error: values inserted non-linearly into dust commitment tree; expected to insert index 118195, but received 118183.
+        at DustLocalState.replayEventsWithChanges (…/@midnight-ntwrk/ledger-v8/midnight_ledger_wasm_bg.js)
+    ```
 
-  Seen with `dust generation tree`, `dust commitment tree` and `zswap commitment tree`. The
-  indices vary with the cursor.
-- Or the timestamp variant, from the same call site:
+  - `zswap commitment tree`: the **shielded** wallet, raised in
+    `ZswapLocalState::replay_events_with_changes`
+    ([`ledger/src/semantics.rs` L288–291 at `ledger-8.1.3`](https://github.com/midnightntwrk/midnight-ledger/blob/b5d3e965a18e4cac17fac4f38446fc55c524439a/ledger/src/semantics.rs#L288-L291)),
+    resuming from `zswapLedgerEvents`. Same mechanism, different cursor.
+
+  The indices vary with the cursor.
+- Or the timestamp variant, from the dust call site:
 
   ```
   received an event with a timestamp prior to the time already synced to (synced to: Timestamp(1790009862), event time: Timestamp(1790009850))
   ```
 
-- `Stream.retry` re-subscribes from the same cursor, so it fails the same way after every
-  retry and every process restart. CPU and memory can tick up, which looks like progress,
-  until a sync timeout fires.
+- Every retry re-subscribes from the same cursor, so it fails the same way after every retry
+  and every process restart. How often the error shows depends on the SDK version:
+  - **Dust wallet 4.2.0** retries with
+    [`Stream.retry`](https://github.com/midnightntwrk/midnight-wallet/blob/7365f982f1149930764334e30a744848d3d67829/packages/dust-wallet/src/v1/RunningV1Variant.ts#L180).
+    Its backoff reads as capped at 2 min, but the cap is a `Schedule.map` and never applies,
+    so the delay keeps doubling (past an hour by about the twelfth attempt). The error gets
+    rarer over time and **can look like it fixed itself**. It hasn't.
+  - **Dust wallet 5.0.0-rc.0** retries with
+    [`Effect.retry` with `syncRetrySchedule`, capped at 2 min](https://github.com/midnightntwrk/midnight-wallet/blob/73e0b1ae68584f0db9205608d37f8dddc5884a82/packages/dust-wallet/src/v1/RunningV1Variant.ts#L124)
+    (the [source comment](https://github.com/midnightntwrk/midnight-wallet/blob/73e0b1ae68584f0db9205608d37f8dddc5884a82/packages/dust-wallet/src/v1/RunningV1Variant.ts#L131)
+    explains the 4.2.0 bug), so the error repeats about every 2 min.
+
+  CPU and memory can tick up, which looks like progress, until a sync timeout fires.
 - It **starts on a particular date with no deploy or config change on your side**, or right
   after you pointed the app at a different indexer.
 - A fresh wallet, or the same seed synced from genesis, works.
@@ -55,8 +76,8 @@ is the index of the event the indexer sent.
   re-sending events you already applied (#781 mainnet).
 - The timestamp variant: also behind. A re-sent event is older than the time already synced
   (#781 preprod).
-- `received > expected`: the cursor points **ahead**, so events were skipped (#643 saw ~20
-  ahead).
+- `received > expected`: the cursor points **ahead**, so events were skipped. (#643 saw ~20
+  ahead, but #643 isn't confirmed as this mechanism; see the top of this runbook.)
 
 ## Root cause
 
@@ -68,6 +89,10 @@ is the index of the event the indexer sent.
 - **Where it resumes.** On restore, it resubscribes with `dustLedgerEvents(id: appliedIndex - 1)`
   (`dist/v1/Sync.js`, `resumeFrom = appliedIndex - 1n`), and the inclusive cursor re-delivers
   the boundary event. Verified in 4.2.0 and unchanged in 5.0.0-rc.0.
+- **The shielded wallet does the same with `zswapLedgerEvents`.**
+  `@midnight-ntwrk/wallet-sdk-shielded` also serializes `offset: appliedIndex`, the last
+  zswap event id. 3.0.1 resubscribes at `zswapLedgerEvents(id: appliedIndex)`. 4.0.0-rc.1
+  resubscribes at `appliedIndex - 1`, like dust. Either way it's the same indexer id.
 - **Where the id comes from.** In `midnight-indexer`, the id is `ledger_events.id BIGSERIAL`.
   One sequence is shared by dust, zswap and contract events (wallet PR #750 describes this).
   So gaps inside one stream are normal. The numbers come from whichever database stored the
@@ -115,12 +140,15 @@ indexer and 632791 on Blockfrost.
   - `midnight-ledger` `ledger/src/error.rs` (the `values inserted non-linearly into {tree_name}
     tree` and `received an event with a timestamp prior to the time already synced to`
     messages)
-  - thrown from `DustLocalState.replayEventsWithChanges`
-  - reached via `CoreWallet.applyEventsWithChanges` → `Sync.applyUpdate` in
+  - dust: thrown from `DustLocalState.replayEventsWithChanges`, reached via
+    `CoreWallet.applyEventsWithChanges` → `Sync.applyUpdate` in
     `@midnight-ntwrk/wallet-sdk-dust-wallet`
+  - shielded (`zswap commitment tree`): raised in `ZswapLocalState::replay_events_with_changes`
+    (`midnight-ledger` `ledger/src/semantics.rs`), reached via `Sync.applyUpdate` in
+    `@midnight-ntwrk/wallet-sdk-shielded`
 - **Cursor code.**
-  - `@midnight-ntwrk/wallet-sdk-dust-wallet` `dist/v1/Serialization.js` (`offset`) and
-    `dist/v1/Sync.js` (`resumeFrom`)
+  - `@midnight-ntwrk/wallet-sdk-dust-wallet` and `@midnight-ntwrk/wallet-sdk-shielded`:
+    `dist/v1/Serialization.js` (`offset`) and `dist/v1/Sync.js` (resume cursor)
   - `@midnight-ntwrk/wallet-sdk-indexer-client` subscriptions `dustLedgerEvents(id: $id)`,
     `zswapLedgerEvents(id: $id)`, `unshieldedTransactions(address, transactionId)`
 - **Known offsets** (point-in-time; don't apply them blindly):
@@ -140,8 +168,10 @@ indexer and 632791 on Blockfrost.
 2. **Two indexers are live (e.g. official and Blockfrost).** Compare a cursor on both with
    [`check-indexer-cursor.mjs`](../indexer-blockfrost-migration-runbook/scripts/check-indexer-cursor.mjs)
    (Node ≥ 22, read-only, no `npm install`; needs a Blockfrost token for the Blockfrost side).
-   It reports `PORTABLE` (exit 0) or `NOT PORTABLE` with the offset (exit 2). Its defaults are
-   preprod. For mainnet, override all five URLs:
+   It reports `PORTABLE` (exit 0) or `NOT PORTABLE` with the offset (exit 2). **Exit 1 means
+   it couldn't check**, not "all good": an endpoint was unreachable, the token was missing or
+   bad, or the arguments were wrong. Expect exit 1 once the official indexer is gone. Its
+   defaults are preprod. For mainnet, override all five URLs:
 
    ```sh
    export BLOCKFROST_PROJECT_ID=<your mainnet project token>
@@ -194,8 +224,10 @@ No funds are at risk: a stuck sync never submits anything.
 - Worked cases:
   - `midnightntwrk/midnight-wallet#781`: mainnet and preprod, official-indexer re-sync, with
     measured gaps and a probe-forward workaround
+- Possibly related, unconfirmed:
   - `midnightntwrk/midnight-wallet#643`: preprod faucet on `indexer-preprod-blue`, received
-    ~20 ahead, possibly blue/green
+    ~20 ahead. Intermittent, seen during a cold replay with no saved cursor, and a faucet fix
+    (0.14.0-rc.2) was named but not described. It may be a different bug.
 - Tracking:
   - `midnightntwrk/servicedesk#216`: the 22-id hole on the official preprod indexer, and
     whether ids are stable across deployments
@@ -207,6 +239,9 @@ No funds are at risk: a stuck sync never submits anything.
   - wallet PR #750 (dust rejects out-of-order batches; shared `BIGSERIAL` explanation)
 - Source:
   - `@midnight-ntwrk/wallet-sdk-dust-wallet` 4.2.0 and 5.0.0-rc.0: `dist/v1/Serialization.js`,
+    `dist/v1/Sync.js`, `dist/v1/RunningV1Variant.js` (retry)
+  - `@midnight-ntwrk/wallet-sdk-shielded` 3.0.1 and 4.0.0-rc.1: `dist/v1/Serialization.js`,
     `dist/v1/Sync.js`
   - `midnight-indexer` `indexer-common/migrations/postgres/001_initial.sql` (`ledger_events`)
-  - `midnight-ledger` `ledger/src/error.rs`, `ledger/src/dust.rs` at `ledger-8.1.3`
+  - `midnight-ledger` `ledger/src/error.rs`, `ledger/src/dust.rs`, `ledger/src/semantics.rs`
+    at `ledger-8.1.3`

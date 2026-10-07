@@ -72,8 +72,10 @@ Do these before writing new diagnosis:
 2. **Search the component repos too, not just this one.** Users file straight into
    `midnight-wallet`, `midnight-indexer` and others, bypassing the front door. Search the
    error text across `midnightntwrk` and cross-link what you find: the component issue, the
-   servicedesk tracking issue and the runbook. (Example: `midnight-wallet#781` ↔
-   `servicedesk#216` ↔ `midnight-wallet#643`, all one cursor mechanism.)
+   servicedesk tracking issue and the runbook. Label a link "possibly related" until the
+   mechanism is confirmed. (Example: `midnight-wallet#781` ↔ `servicedesk#216` share one
+   cursor mechanism. `midnight-wallet#643` is only possibly related: its errors were
+   intermittent, came during a replay with no saved cursor, and may have had a separate fix.)
 3. **Keep version hygiene separate from root cause.** An old version is an easy suspect. It is
    only the cause if the diff between the reported and current version touches the failing
    code path. Check the release diff (or the error site in current source) before saying
