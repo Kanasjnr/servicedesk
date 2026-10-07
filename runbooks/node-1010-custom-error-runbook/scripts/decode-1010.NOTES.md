@@ -10,7 +10,7 @@ tested. **The user runs it** on their own error text; it signs and submits nothi
 |---|---|---|
 | Ledger code | `Custom error: N` anywhere (RPC error, `String(err)`, `RPC-CORE` line, JSON) | name, category, a hint for codes with a reproduction or worked case, and what the code is on the other node version |
 | Pool error | `10xx: <Substrate message>[: data]`, or a JSON-RPC error object in any key order (also escaped inside a JSON log line) | the Substrate meaning; for 1010 without a number, the reason text |
-| No-code wallet error | `Transaction is invalid and was rejected by the node`, `…got dropped…`, `…got usurped…`, a submission's `disconnected from ws://…: 1000:: Normal Closure` | what happened and what to do |
+| No-code wallet error | `Transaction is invalid and was rejected by the node`, `…got dropped…`, `…got usurped…`, a submission's `disconnected from … Normal Closure` | what happened and what to do |
 | Node log | `Rejected transaction <hash> from mempool: …` (the node's error, or "guaranteed execution would fail: …") and `Rejecting transaction <hash> at pre-dispatch: …`; `Transaction malformed: …` detail lines | the code that line maps to; the detail text |
 | Bare number | 0-255 (ledger) or 1001-1021 (pool) | as above |
 | Wallet wrapper only | `Transaction submission error`, `SubmissionError`, `Unexpected error submitting scoped transaction` and nothing else | exit 2 and how to get the code out |
@@ -77,7 +77,7 @@ submission without awaiting it. The awaited cases ran twice (2026-10-06), the pe
 | Same transaction again 30 s after it was finalized | `Custom error: 193` | `… from mempool: guaranteed execution would fail: ReplayProtectionViolation(IntentAlreadyExists)` |
 | Second wallet instance on the same seed spends the same DUST 1 s after the first submission, while it was pending | no code: `[cause]: TransactionInvalidError: Transaction is invalid and was rejected by the node`, after 5.9 s; the first was accepted | `dust double spend …`, then `Rejecting transaction … at pre-dispatch: guaranteed execution would fail: DustDoubleSpend(DustNullifier(…))` |
 | Second wallet instance spends the same DUST after the first was finalized, and again 30 s later | `Custom error: 196` both times | `dust double spend …`, then `… from mempool: guaranteed execution would fail: DustDoubleSpend(…)` |
-| Same expired transaction three times (at once, at once, after 5 s) | 182; then no code, `[cause]: Error: disconnected from ws://127.0.0.1:9944/: 1000:: Normal Closure`; then 182 again; never 1012 | one rejection for the first, none for the immediate second (checked on the 2026-10-07 run) |
+| Same expired transaction three times (at once, at once, after 5 s) | 182; then no code, `[cause]: Error: disconnected from <local node>: 1000:: Normal Closure`; then 182 again; never 1012 | one rejection for the first, none for the immediate second (checked on the 2026-10-07 run) |
 | NIGHT transfer proved by `midnightntwrk/proof-server:8.0.3` (`/version` 8.0.3, one `POST /prove` logged) | accepted | none |
 
 What each way of printing the rejected error showed (expired-TTL case):

@@ -546,6 +546,10 @@ const normData = (d) =>
     .trim();
 
 // JSON-RPC errors in any key order, also when the JSON sits escaped inside another JSON log line.
+const JSON_STR = {
+  message: /"message"\s*:\s*"((?:[^"\\]|\\.)*)"/,
+  data: /"data"\s*:\s*"((?:[^"\\]|\\.)*)"/,
+};
 function* jsonPoolErrors(text) {
   for (const t of [text, text.replace(/\\"/g, '"')]) {
     for (const m of t.matchAll(/"code"\s*:\s*(10[0-2]\d)\b/g)) {
@@ -554,7 +558,7 @@ function* jsonPoolErrors(text) {
       if (start < 0 || end < 0) continue;
       const obj = t.slice(start, end + 1);
       const str = (k) => {
-        const s = new RegExp(`"${k}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"`).exec(obj)?.[1];
+        const s = JSON_STR[k].exec(obj)?.[1];
         if (s === undefined) return undefined;
         try {
           return JSON.parse(`"${s}"`);

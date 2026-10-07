@@ -102,7 +102,7 @@ marked otherwise.
   the block limits` is a Substrate check, not the Midnight ledger. See the
   [batched deploy runbook](../contract-batched-deploy-runbook/contract-batched-deploy-runbook.md)
   (`servicedesk#225`; not reproduced here).
-- **`disconnected from ws://…: 1000:: Normal Closure` and no code:** the connection closed before
+- **`disconnected from … Normal Closure` and no code:** the connection closed before
   the node answered, so there is no verdict. Seen when the same transaction was resubmitted
   straight after a rejection; the node never logged the second attempt. Retry after a few seconds.
 
