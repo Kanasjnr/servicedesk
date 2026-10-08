@@ -5,9 +5,9 @@ through the wallet SDK (or midnight-js `submitTx`), the DApp sees only `Transact
 error`: the node's reason, `Custom error: N`, is two causes down the error chain, where
 `err.message` doesn't reach. Midnight.js contract calls do put it in `err.message`. Find the
 `RPC-CORE: submitAndWatchExtrinsic` line already in your console (or print `String(err)`), decode N
-with the script below, and match it to a fix. The numbers depend on the node version. Node 2.x drops or
-renames ten of node 1.0.x's codes, and the docs' "Decode 1010 errors" page lists the 2.x table,
-although preview, preprod and mainnet run node 1.0.400.
+with the script below, and match it to a fix. The numbers depend on the node version: node 2.x
+drops or renames ten of node 1.0.x's codes, while preview, preprod and mainnet run node 1.0.400.
+Decode against the table for the node that rejected the transaction.
 
 _Compiled 2026-10-07 from local reproductions on node 1.0.400 (method and results in
 [`scripts/decode-1010.NOTES.md`](scripts/decode-1010.NOTES.md)). Sources, pinned:_
@@ -21,9 +21,9 @@ _Compiled 2026-10-07 from local reproductions on node 1.0.400 (method and result
   1.0.400 pins: `ledger/src/error.rs` (the texts in the node log)_
 - _polkadot-sdk `polkadot-stable2603` (`2e4dd0bc22366a5af820492528869a493b5a5208`):
   `substrate/client/rpc-api/src/author/error.rs`_
-- _midnight-docs: `docs/nodes/error-codes.mdx` at `9c10c788d677519d4a5eaf70f7cc53419138da54` and
+- _midnight-docs: `docs/nodes/error-codes.mdx` and
   `docs/troubleshoot/decode-1010-transaction-rejection-errors.mdx` at
-  `1bd43d50d6feba0332bb3897cc21648bdf1d4794`_
+  `6a971bf2845645599c5f49e21fb13cbdae6f91dc` (midnight-docs#1454)_
 - _`@midnight-ntwrk/wallet-sdk-facade` 4.1.0, `wallet-sdk-node-client` 1.1.3, `effect` 3.22.0,
   midnight-js 4.1.1 (`midnight-js-utils`, `midnight-js-contracts`, testkit-js)_
 - _live node RPC on preview, preprod and mainnet (`system_version` `1.0.400-c338b9ac`)_
@@ -166,12 +166,14 @@ was added in 2.1.0-rc.1). Seven 1.0.x codes are gone in 2.x, and three more beco
 2.0.0-rc.4 devnet; on node 1.0.x the same failure is 168. Stagenet already runs node 2.0.0
 (`system_version` `2.0.0-d9729c13`).
 
-**Two docs pages disagree.** [Node error codes](https://docs.midnight.network/nodes/error-codes)
-matches node 1.0.400 (only 211, `SystemTransaction.MerkleTreeError`, is missing).
+**The docs.** [Node error codes](https://docs.midnight.network/nodes/error-codes) is the
+reference for node 1.0.x and matches node 1.0.400 code for code.
 [Decode 1010 errors](https://docs.midnight.network/how-to/decode-1010-transaction-rejection-errors)
-is the 2.x table: it marks 168, 182, 186, 187, 188, 193 and 205 as retired and lists 212 to 250
-as current. Node 1.0.400 still uses all seven (182 and 193 were reproduced on it). Use the Node
-error codes page for preview, preprod and mainnet until they move to 2.x.
+links to it. Until
+[midnight-docs#1454](https://github.com/midnightntwrk/midnight-docs/pull/1454) (merged
+2026-10-07), the decode page had its own 2.x table that marked 168, 182, 186, 187, 188, 193 and
+205 as retired, although node 1.0.400 still uses all seven (182 and 193 were reproduced on it).
+Copies of the docs made before then, including answers built from them, can still carry it.
 
 **Malformed or Invalid.** A `Malformed` code is about the transaction as built (structure,
 proofs, signatures, balance, TTL, fees). An `Invalid` code is about the ledger state it met
@@ -381,9 +383,12 @@ expired and 30 days ahead, came back as 182, from the first check.
 
 - [servicedesk#225](https://github.com/midnightntwrk/servicedesk/issues/225): the SDK error that
   reaches the DApp doesn't carry the node's reason in `message`.
-- midnight-docs (to file): the "Decode 1010 errors" page lists node 2.x codes as current and marks
-  codes node 1.0.400 still uses as retired; its note that 168 was "replaced by 155" is wrong (155
-  exists on both, and 2.x splits 168 into 231 and 232); the Node error codes page is missing 211.
+- [midnight-docs#1454](https://github.com/midnightntwrk/midnight-docs/pull/1454) (merged
+  2026-10-07): made the Node error codes page the single node 1.0.x reference, added 211, and
+  removed the 2.x table from "Decode 1010 errors".
+- [midnight-docs#1509](https://github.com/midnightntwrk/midnight-docs/issues/1509): the decode
+  page's "no inner u8" causes (signature, era, nonce) don't apply to Midnight's unsigned
+  transactions, and the code-less `TransactionInvalidError` isn't documented.
 
 ## Reference material
 
@@ -396,9 +401,10 @@ expired and 30 days ahead, came back as 182, from the first check.
   devnet), `servicedesk#150` (170 for every transaction on stagenet, an indexer bug),
   `servicedesk#225` (1010 "would exhaust the block limits"), `servicedesk#235` (the 182 TTL text
   in a node's log while replaying history).
-- **Docs:** [Node error codes](https://docs.midnight.network/nodes/error-codes) (1.0.x table and
-  how the SDK wraps the error), [Decode 1010 errors](https://docs.midnight.network/how-to/decode-1010-transaction-rejection-errors)
-  (2.x table).
+- **Docs:** [Node error codes](https://docs.midnight.network/nodes/error-codes) (the 1.0.x table
+  and how the SDK wraps the error),
+  [Decode 1010 errors](https://docs.midnight.network/how-to/decode-1010-transaction-rejection-errors)
+  (extracting the code; links to the table).
 - **Source:**
   - midnight-node `node-1.0.400`: [`ledger/src/versions/common/types.rs` L277-419](https://github.com/midnightntwrk/midnight-node/blob/3acfd2edecdcd91373b6a506933f4c14ad3f0308/ledger/src/versions/common/types.rs#L277-L419)
     (the code table), [`conversions.rs` L48-51 and L137-139](https://github.com/midnightntwrk/midnight-node/blob/3acfd2edecdcd91373b6a506933f4c14ad3f0308/ledger/src/versions/common/conversions.rs#L48-L51)

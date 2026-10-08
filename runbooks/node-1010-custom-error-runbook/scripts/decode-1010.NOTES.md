@@ -53,7 +53,9 @@ The docs pages were compared with these tables by the same parser:
 `docs/nodes/error-codes.mdx` at `9c10c788d677519d4a5eaf70f7cc53419138da54` (2026-09-23) matches
 node 1.0.400 except that 211 is missing; `docs/troubleshoot/decode-1010-transaction-rejection-errors.mdx`
 at `1bd43d50d6feba0332bb3897cc21648bdf1d4794` (2026-08-12) matches node 2.x except that 140 is
-missing, and marks 168, 182, 186, 187, 188, 193 and 205 as retired.
+missing, and marks 168, 182, 186, 187, 188, 193 and 205 as retired. After midnight-docs#1454
+(merged 2026-10-07, `6a971bf2845645599c5f49e21fb13cbdae6f91dc`) the Node error codes page matches
+node 1.0.400 code for code, and the decode page links to it instead of carrying a table.
 
 ## Verified before hand-off (2026-10-07)
 
