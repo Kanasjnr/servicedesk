@@ -8,7 +8,7 @@ borrows from other languages (`while`, `msg.sender`, `Map.get`), from older Comp
 checker below: it flags the known mistakes in one pass and explains the compiler's message with a
 fix that compiles. Then compile with 0.31.1, the compiler the networks need.
 
-_Compiled 2026-10-08 from 133 reproduced cases (400 contracts), each compiled with 0.31.1 and 0.35.0
+_Compiled 2026-10-08 from 139 reproduced cases (413 contracts), each compiled with 0.31.1 and 0.35.0
 (and once with 0.34.0, for comparison). Where a fix's behaviour was in question, it was also run with
 the Compact runtime (40 cases). The checker was then run on 1,100 contracts from 31 public repos.
 Method and results are in [`scripts/check-compact.NOTES.md`](scripts/check-compact.NOTES.md).
@@ -139,19 +139,21 @@ a bare `unbound identifier X` doesn't say whether X is invented, renamed, newer,
    ```
 
    - **Static scan:** flags every known mistake it can see, with the line and the fix. On the
-     reproduction corpus it flags 140 of the 204 contracts the compiler rejects, and none of the 166
+     reproduction corpus it flags 143 of the 210 contracts the compiler rejects, and none of the 173
      corrected ones; its rules came from that corpus, so expect it to catch less on new code. The
      rest (mostly disclosure and type errors) need the compiler. On 509 public contracts that compile
      with 0.31.1 (midnight-expert, the Compact repo's examples, OpenZeppelin, midnight-examples and
-     others) it reports 2 errors, both a `Uint<1000>` in a generic module that's never instantiated.
-     In a file that includes or imports other code, a name it doesn't know is only a warning.
+     others) it reports no errors. A name it doesn't know, in a file that includes or imports other
+     code, is only a warning, as is a problem inside a generic module that's never used.
    - **`--compile`:** compiles with 0.31.1 and explains the error. Disclosure errors are listed
      one by one: the private value, where it becomes public (the last step of the compiler's path,
      which is where `disclose()` goes), and the path. If 0.31.1 fails and 0.35.0 is installed, it
      tries 0.35.0 too, and says so when the code only works on the newer compiler. A file with no
      pragma and nothing exported (a fragment other files include) isn't compiled on its own, and a
      compile that runs past 300 s is stopped (`--timeout`).
-   - **`--explain`:** turns a pasted compiler message into the fix.
+   - **`--explain`:** turns a pasted compiler message into the fix. It has an answer for every
+     message in the corpus and for 574 of the 591 failures from those public repos (the rest are
+     compiler regression tests for edge cases).
 
    Exit code: 0 = nothing found (and it compiles, with --compile), 2 = at least one problem, 1 = it
    could not run. Example:

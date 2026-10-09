@@ -20,8 +20,11 @@ own contracts; it never edits them.
     the catalogues, not in pasted user errors.
   - The 34 Kapa compile-failure queries counted in midnight-docs#1377 aren't public; their texts
     weren't available.
-- **The end-to-end test** (below) added 7 patterns, and **the fact-check** added 2 (reserved words used
-  as syntax, and a struct called like a function).
+- **The end-to-end test** (below) added 7 patterns, **the fact-check** added 2 (reserved words used
+  as syntax, and a struct called like a function), and **the real-contract test** added 6 (an
+  `assert` with type arguments and no message, a method a nested Map's values don't have, the older
+  `Unsigned Integer[N]`, `.x` on a `JubjubPoint`, a ledger type used as a value, and `Map` with one
+  type argument).
 
 ## How each case was reproduced
 
@@ -33,17 +36,17 @@ checks use (`runtime_files`).
 
 | | Count |
 |---|---|
-| Cases | 133 |
-| Wrong contracts | 234: 204 rejected by 0.31.1; 30 (in 24 cases) compile |
-| Corrected contracts | 166: all compile on 0.31.1; 162 also on 0.35.0 |
+| Cases | 139 |
+| Wrong contracts | 240: 210 rejected by 0.31.1; 30 (in 24 cases) compile |
+| Corrected contracts | 173: all compile on 0.31.1; 169 also on 0.35.0 |
 | Wrong contracts that behave differently on 0.31.1 and 0.35.0 | 14 compile on one and not the other; 23 get a different message |
-| Distinct compiler messages | 193 |
+| Distinct compiler messages | 198 |
 
 The 4 corrected contracts that fail on 0.35.0 are 0.31.1 workarounds: the `ecMulGenerator` forms,
 which take a `JubjubScalar` on 0.35.0, and the exact pragma pin `0.23`.
 
 **0.34.0**, the default compiler on many machines, was run over the corpus once for comparison (385
-files, before the last two cases were added). Its first errors match 0.35.0's everywhere except
+files, before the last eight cases were added). Its first errors match 0.35.0's everywhere except
 `PublicAddress` and `kernel.caller()`, which 0.34.0 doesn't have, and the pragmas that pin 0.26 or 0.27.
 Its language version is 0.26.0.
 
@@ -199,7 +202,7 @@ compilers (0.34.0 included) and the runtime. All 25 problems it found are fixed:
 - **Wrong `--explain` answers for look-alike messages.** A shift was read as an angle-bracket cast,
   `match` as a witness with a body, 0.35.0's `emit` as missing `if` parentheses. The type-argument
   forms had the wrong number of arguments, and reserved words used as syntax (`void`, `throw`, `null`,
-  `this`) were told to rename. The test runner now checks 18 such messages.
+  `this`) were told to rename. The test runner now checks 25 such messages.
 - **The `--compile` disclosure line** showed where the path starts, not where the value becomes public.
 - **The "0.35.0-only" list:** most of it is already in 0.34.0.
 - **Overstatements:** stale counts, the `fixup` description, the error order, signature advice that
@@ -212,14 +215,17 @@ compact-contracts at `v0.3.0-rc.2` and the example-* repos. Adversarial inputs w
 
 | | Before | After |
 |---|---|---|
-| 509 files that compile with 0.31.1 | 53 false errors in 28 files | 2 errors in 1 file, plus 3 warnings |
+| 509 files that compile with 0.31.1 | 53 false errors in 28 files | 0 errors, 5 warnings |
 | Adversarial inputs that compile | 18 false findings | 0 |
+| `--explain` on the 591 real failures | 457 explained | 574 explained |
 | 5 MB file of `a / b` lines | killed at 400 s | 2.4 s |
 | 1 MB files of `caller` and `send(` | 49–52 s | 0.6 s |
 
-The 2 remaining errors are a `Uint<1000>` in a generic module that's never instantiated, so the
-compiler never checks it. The 3 warnings are names defined in an included or imported file. Of the 591
-real files that fail on 0.31.1, 263 are now flagged statically.
+The 5 warnings are names defined in an included or imported file, and a `Uint<1000>` in a generic
+module that's never instantiated, which the compiler doesn't check until the module is used. Of the
+591 real files that fail on 0.31.1, 263 are now flagged statically. The 17 failures `--explain` still
+has no answer for come from the Compact repo's regression tests for compiler edge cases (external
+contract declarations, tuple slicing, a 300-digit literal), and one is the hang below.
 
 What was fixed:
 
@@ -245,9 +251,11 @@ What was fixed:
   `midnight-contracts/contracts/bugs/execution/pm_16012.compact` hangs both compilers.
 - **Symlinks:** loops, broken links and duplicate files.
 - **Speed:** line numbers were recomputed for every finding.
-
-Still missed by the static scan, and left to `--compile`: `assert` with a comma inside type arguments
-and no message, and `m.lookup(a).get(b)` on a nested Map.
+- **Missed by the static scan:** an `assert` with a comma inside type arguments and no message, and
+  `m.lookup(a).get(b)` on a nested Map. Both are flagged now.
+- **Messages with no explanation:** a ledger type used as a value, `.x` on a `JubjubPoint`, wrong type
+  argument counts for any ledger type, ambiguous overloads, include and type cycles, out-of-range
+  literals, lengths and Uint ranges, keywords in the wrong place, and the older `Unsigned Integer[N]`.
 
 ## What the checker does
 
@@ -259,14 +267,16 @@ and no message, and `m.lookup(a).get(b)` on a nested Map.
   - invented functions and types (a warning, not an error, when the file includes or imports other
     code)
   - names newer than 0.31.1
-  - methods each ledger type doesn't have (from `midnight-ledger.ss`)
+  - methods each ledger type doesn't have (from `midnight-ledger.ss`), including on a nested Map's
+    values
   - camelCase struct fields
   - syntax from other languages (loops, `let`/`var`, `break`, `switch`/`match`, `try`, `::`, tuple
     `.0`, `if` without parentheses, `emit`, top-level `const`, `default<T>()`, `Bytes<N>{}`,
     one-argument `assert`, the old `assert x "msg"` form, modifier order, reserved words used as
     syntax, a struct called like a function)
   - operators Compact lacks (`& | ^ ~ << >> / %`)
-  - Uint widths outside 1 to 248 and MerkleTree depth
+  - Uint widths outside 1 to 248 (a warning inside a generic module), the older `Unsigned Integer[N]`,
+    and MerkleTree depth
   - missing type arguments
   - a missing standard-library import
   - assignment to a ledger type, or to a `const` declared earlier in the same circuit
@@ -284,8 +294,8 @@ and no message, and `m.lookup(a).get(b)` on a nested Map.
 
 | Run | Result |
 |---|---|
-| Static scan over 400 contracts | 140 of the 204 rejected wrong contracts flagged; the other 64 (mostly disclosure and type errors) are left to `--compile`. No errors on the 166 corrected contracts |
-| Look-alike messages through `--explain` | 18 of 18 get the expected fix |
+| Static scan over 413 contracts | 143 of the 210 rejected wrong contracts flagged; the other 67 (mostly disclosure and type errors) are left to `--compile`. No errors on the 173 corrected contracts |
+| Look-alike messages through `--explain` | 25 of 25 get the expected fix |
 | `--compile` (800 compiles, both compilers) | Every first error and exit code matches the recorded one, and every message has an explanation. Five `--explain` runs were killed when the machine slept mid-run; re-run, all five were explained |
 
 Bugs these runs caught, all fixed:
