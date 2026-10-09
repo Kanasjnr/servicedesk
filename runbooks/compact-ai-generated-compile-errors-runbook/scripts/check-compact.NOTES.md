@@ -296,7 +296,7 @@ What was fixed:
 |---|---|
 | Static scan over 413 contracts | 143 of the 210 rejected wrong contracts flagged; the other 67 (mostly disclosure and type errors) are left to `--compile`. No errors on the 173 corrected contracts |
 | Look-alike messages through `--explain` | 25 of 25 get the expected fix |
-| `--compile` (800 compiles, both compilers) | Every first error and exit code matches the recorded one, and every message has an explanation. Five `--explain` runs were killed when the machine slept mid-run; re-run, all five were explained |
+| `--compile` (826 compiles, both compilers) | Every first error and exit code matches the recorded one, and every message has an explanation |
 
 Bugs these runs caught, all fixed:
 
