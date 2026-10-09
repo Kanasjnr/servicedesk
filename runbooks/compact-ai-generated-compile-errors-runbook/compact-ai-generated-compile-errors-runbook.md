@@ -369,7 +369,7 @@ them, and each was checked with the Compact runtime:
 
 ## Upstream follow-ups
 
-- midnight-expert (to file): error texts that don't match the compiler, contradictions between its own
+- midnight-expert ([#276](https://github.com/midnightntwrk/midnight-expert/issues/276)): error texts that don't match the compiler, contradictions between its own
   files, and fixes that are wrong when run. Specifically:
   - It documents `implicit disclosure of witness value`, but the compiler prints
     `potential witness-value disclosure must be declared but is not`.
