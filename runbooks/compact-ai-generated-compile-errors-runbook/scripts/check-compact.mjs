@@ -367,8 +367,8 @@ function scan(file, src) {
     const lang = LANGUAGE[opts.compiler];
     if (lang) {
       const ok = pragmaAccepts(expr, lang);
-      if (ok === false) add(pragma.index, 'pragma-mismatch', `\`pragma language_version ${expr}\` rejects compiler ${opts.compiler} (language ${lang}).`, `Compiler ${opts.compiler} is language ${lang}. Use \`pragma language_version >= 0.22;\` (accepts 0.31.1 and 0.35.0) or pin \`${lang.split('.').slice(0, 2).join('.')}\`.`);
-      if (ok === undefined) add(pragma.index, 'pragma-syntax', `\`pragma language_version ${expr}\` isn't a form the compiler accepts.`, 'Combine bounds with && (e.g. `>= 0.22 && <= 0.27`).');
+      if (ok === false) add(pragma.index, 'pragma-mismatch', `\`pragma language_version ${expr}\` rejects compiler ${opts.compiler} (language ${lang}).`, opts.compiler === NETWORK_COMPILER ? `Compiler ${opts.compiler} is language ${lang}. Use \`pragma language_version >= 0.22 && <= 0.23;\`, which accepts only 0.31.1, so a newer compiler fails straight away; \`>= 0.22\` if the code should also build on newer compilers.` : `Compiler ${opts.compiler} is language ${lang}: use a pragma that accepts it, e.g. \`>= 0.22\`. The networks need 0.31.1 (language 0.23.0).`);
+      if (ok === undefined) add(pragma.index, 'pragma-syntax', `\`pragma language_version ${expr}\` isn't a form the compiler accepts.`, 'Combine bounds with && (e.g. `>= 0.22 && <= 0.23`).');
     }
   }
 
@@ -643,7 +643,7 @@ function explain(message, line = '') {
     return `The arguments to \`${fn}\` don't match its declaration (in the standard library, or your own circuit): check the type arguments, and the argument types, count and order.`;
   }
   if ((r = m(/language version (\S+) mismatch/)))
-    return `The pragma doesn't accept this compiler's language version (${r[1]}). Compiler 0.31.1 is language 0.23.0; 0.35.0 is 0.27.0. Use \`pragma language_version >= 0.22;\`, and compile with 0.31.1 for the networks.`;
+    return `The pragma doesn't accept this compiler's language version (${r[1]}). Compiler 0.31.1 is language 0.23.0, 0.34.0 is 0.26.0 and 0.35.0 is 0.27.0. The networks need 0.31.1: compile with \`compact compile +0.31.1\` and use \`pragma language_version >= 0.22 && <= 0.23;\`, which makes a newer compiler fail straight away (\`>= 0.22\` if the code should also build on newer compilers).`;
   if ((r = m(/structure (\w+) has no field named (\w+)/))) {
     const snake = r[2].replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
     return snake !== r[2] ? `Use \`${snake}\`: standard library struct fields are snake_case (camelCase names are planned, not available).` : `${r[1]} has no field ${r[2]}.`;
@@ -674,7 +674,7 @@ function explain(message, line = '') {
   if (m(/found "\w+" looking for "const"/)) return 'The loop variable needs const: `for (const i of 0..N) { … }`.';
   if (m(/looking for a non-negative numeric constant/)) return 'pad() needs a literal length: `pad(32, "text")`.';
   if (m(/found "\w+" looking for a string/)) return 'pad() needs a string literal: `pad(32, "text")`. For a variable, it\'s already Bytes.';
-  if (m(/found "<=" looking for ";", "\|\|", or "&&"/) || m(/found "<" looking for ";", "\|\|", or "&&"/)) return 'Combine pragma bounds with &&: `pragma language_version >= 0.22 && <= 0.27;`.';
+  if (m(/found "<=" looking for ";", "\|\|", or "&&"/) || m(/found "<" looking for ";", "\|\|", or "&&"/)) return 'Combine pragma bounds with &&: `pragma language_version >= 0.22 && <= 0.23;`.';
   if (m(/found keyword "export" looking for (?:an identifier|"ledger")/)) return 'Modifier order: `export sealed ledger name: Type;`.';
   if (m(/found keyword "from" looking for/)) return '`from` is a keyword: rename the identifier (e.g. `sender`).';
   if (m(/found ";" looking for "\("/) || m(/found ";" looking for "\|\|", "&&"/)) return 'Circuits aren\'t values: there are no lambdas or function references. Call the circuit directly.';
@@ -785,7 +785,7 @@ async function compileFile(file, version) {
     const r = await runCompact(['compile', `+${version}`, '--skip-zk', path.basename(file), out], path.dirname(file), opts.timeout * 1000);
     if (r.timedOut) return { ok: false, timedOut: true, message: `the compiler didn't finish within ${opts.timeout} s and was stopped`, errors: [] };
     const text = r.text;
-    if (/not installed|No such version|failed to (?:find|locate) (?:compiler|version)/i.test(text) && r.status !== 0) return { missing: true, text };
+    if (/not installed|No such version|failed to (?:find|locate) (?:compiler|version)|Couldn't find compiler|Directory does not exist/i.test(text) && r.status !== 0) return { missing: true, text };
     const lines = text.split('\n').filter((l) => l.trim() && !l.startsWith('Compiling'));
     // One "Exception:" block per error. Disclosure errors all arrive in one run.
     const errors = [];

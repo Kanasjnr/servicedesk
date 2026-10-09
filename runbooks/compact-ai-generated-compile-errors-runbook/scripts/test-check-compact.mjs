@@ -65,7 +65,7 @@ function compileOne(file, version) {
     const lines = `${r.stdout}${r.stderr}`.split('\n').filter((l) => l.trim() && !l.startsWith('Compiling'));
     const i = lines.findIndex((l) => l.startsWith('Exception:'));
     const message = i < 0 ? '' : [lines[i].replace(/^Exception: \S+ line \d+ char \d+:\s*/, ''), ...lines.slice(i + 1).filter((l) => /^\s/.test(l)).map((l) => l.trim())].join(' ').trim();
-    return { exit: r.status, message, missing: r.status !== 0 && /not installed|no such version/i.test(lines.join(' ')) };
+    return { exit: r.status, message, missing: r.status !== 0 && /not installed|no such version|couldn't find compiler|directory does not exist/i.test(lines.join(' ')) };
   } finally {
     fs.rmSync(out, { recursive: true, force: true });
   }
