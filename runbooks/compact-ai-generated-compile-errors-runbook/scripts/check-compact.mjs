@@ -393,8 +393,11 @@ function scan(file, src) {
   each(/\b(let|var)\s+\w+/g, (m) => add(m.index, 'let-var', `\`${m[1]}\` is reserved.`, KEYWORD_FIX.let));
   each(/\bfunction\b/g, (m) => add(m.index, 'function-keyword', '`function` is reserved.', KEYWORD_FIX.function));
   each(/\b(void|throw|null|do|this|public|private|class)\b/g, (m) => add(m.index, 'reserved-word', `\`${m[1]}\` is reserved and isn't Compact syntax.`, KEYWORD_FIX[m[1]]));
-  for (const st of code.matchAll(/\bstruct\s+(\w+)/g))
-    each(new RegExp(`(?<![\\w.])${st[1]}\\s*\\(`, 'g'), (m) => add(m.index, 'struct-call', `\`${st[1]}(…)\`: a struct isn't called like a function.`, `Build it with braces: \`${st[1]} { field: value, … }\`.`));
+  const structNames = new Set([...code.matchAll(/\bstruct\s+(\w+)/g)].map((st) => st[1]));
+  each(/(?<![\w.])(\w+)\s*\(/g, (m) => {
+    if (!structNames.has(m[1])) return;
+    add(m.index, 'struct-call', `\`${m[1]}(…)\`: a struct isn't called like a function.`, `Build it with braces: \`${m[1]} { field: value, … }\`.`);
+  });
   each(/\b[A-Z]\w*::\w+/g, (m) => add(m.index, 'enum-double-colon', `\`${m[0]}\`: enum variants use a dot.`, `Write \`${m[0].replace('::', '.')}\`.`));
   each(/\bfor\s*\(?\s*(?:const\s+)?\w+\s+in\b/g, (m) => add(m.index, 'for-in', 'This loop form doesn\'t exist.', 'The only loop is `for (const i of 0..N) { … }` (or `of` a Vector).'));
   each(/\bfor\s*\(\s*(?:let|var|const)?\s*\w+\s*=/g, (m) => add(m.index, 'for-c-style', 'C-style for loops don\'t exist.', 'Use `for (const i of 0..N) { … }`.'));
@@ -416,7 +419,8 @@ function scan(file, src) {
   each(/\bsealed\s+export\b|\bledger\s+export\b|\bsealed\s+ledger\s+export\b/g, (m) => add(m.index, 'modifier-order', `\`${m[0]}\`: wrong modifier order.`, 'Write `export sealed ledger name: Type;`.'));
   each(/\b(?:Historic)?MerkleTree\s*<\s*(\d+)\s*,/g, (m) => { const d = Number(m[1]); if (d < 2 || d > 32) add(m.index, 'merkletree-depth', `MerkleTree depth ${d} is out of range.`, 'The depth must be between 2 and 32.'); });
   // A letter first is a missing depth, unless it's a size parameter (`#depth`) of the enclosing module or circuit.
-  each(/\b(?:Historic)?MerkleTree\s*<\s*([A-Za-z]\w*)/g, (m) => new RegExp(`#\\s*${m[1]}\\b`).test(code) || add(m.index, 'merkletree-missing-depth', 'MerkleTree needs a depth first.', 'Write `MerkleTree<depth, T>`, e.g. `MerkleTree<10, Bytes<32>>`.'));
+  const sizeParams = new Set([...code.matchAll(/#\s*([A-Za-z]\w*)\b/g)].map((p) => p[1]));
+  each(/\b(?:Historic)?MerkleTree\s*<\s*([A-Za-z]\w*)/g, (m) => sizeParams.has(m[1]) || add(m.index, 'merkletree-missing-depth', 'MerkleTree needs a depth first.', 'Write `MerkleTree<depth, T>`, e.g. `MerkleTree<10, Bytes<32>>`.'));
   each(/[=(,]\s*<\s*[A-Z]\w*(?:<[^>]*>)?\s*>\s*\w/g, (m) => add(m.index, 'angle-bracket-cast', 'Angle-bracket casts don\'t exist.', 'Cast with `as`: `x as Field`.'));
   if ((code.match(/\bconstructor\s*\(/g) ?? []).length > 1) add(code.search(/\bconstructor\s*\(/), 'multiple-constructors', 'More than one constructor.', 'A contract has at most one constructor.');
   // operators Compact doesn't have
@@ -457,8 +461,9 @@ function scan(file, src) {
   each(/(?<![.\w$])caller\b(?![\w$]|\s*[:(])/g, (m) => { if (!defined.has('caller') && !/kernel\s*\.\s*$/.test(code.slice(Math.max(0, m.index - 40), m.index))) addName(m.index, 'invented', '`caller` doesn\'t exist.', SECRET_IDENTITY); });
   if (!importsStd) {
     // Lower-case names count only when called; type names only outside a field or member position.
-    const re = new RegExp(`(?<![\\w$.])(${[...STDLIB, 'Counter', 'Map', 'Set', 'List', 'MerkleTree', 'HistoricMerkleTree'].join('|')})(?![\\w$])`, 'g');
-    for (const u of code.matchAll(re)) {
+    const stdlibNames = new Set([...STDLIB, 'Counter', 'Map', 'Set', 'List', 'MerkleTree', 'HistoricMerkleTree']);
+    for (const u of code.matchAll(/(?<![\w$.])([A-Za-z]\w*)(?![\w$])/g)) {
+      if (!stdlibNames.has(u[1])) continue;
       const after = code.slice(u.index + u[0].length, u.index + u[0].length + 200);
       if (defined.has(u[1]) || (/^[a-z]/.test(u[1]) ? !/^\s*(?:\(|<[^;(){}&|=!]*>\s*\()/.test(after) : /^\s*:(?!:)/.test(after))) continue;
       add(u.index, 'missing-stdlib-import', `\`${u[1]}\` comes from the standard library, which isn't imported.`, `Add \`import CompactStandardLibrary;\` after the pragma.${hasPragma ? '' : ' (If this file is included by one that imports it, ignore this.)'}`, hasPragma ? 'error' : 'warning');
@@ -532,8 +537,9 @@ function scan(file, src) {
     else addName(m.index, 'invented', `\`${name}\` isn't a Compact type.`, INVENTED[name]);
   });
   each(/(?<![\w$.])msg\.\w+/g, (m) => defined.has('msg') || addName(m.index, 'invented', `\`${m[0]}\` doesn't exist.`, SECRET_IDENTITY));
+  const ownCamelFields = new Set([...code.matchAll(/\b(goesLeft|isSome|isLeft|mtIndex|domainSep)\s*:/g)].map((f) => f[1]));
   each(/\.(goesLeft|isSome|isLeft|mtIndex|domainSep)\b/g, (m) => {
-    if (new RegExp(`\\b${m[1]}\\s*:`).test(code)) return; // the contract's own struct has this field
+    if (ownCamelFields.has(m[1])) return; // the contract's own struct has this field
     const snake = m[1].replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
     add(m.index, 'camelcase-field', `\`.${m[1]}\`: standard library struct fields are snake_case.`, `Use \`.${snake}\`. (The camelCase names are planned, not available yet.)`);
   });
