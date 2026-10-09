@@ -91,6 +91,13 @@ const EXPLAIN_EXPECT = [
   ['parse error: found keyword "export" looking for "ledger"', 'export sealed ledger'],
   ['expected first argument of persistentHash to have type Bytes<32> but received Field', 'must be Bytes<32>'],
   ['opaque type number is not supported', 'Opaque<"Uint8Array">'],
+  ['mismatch between actual number 1 and declared number 2 of ADT parameters for Map', 'Map<K, V>'],
+  ['mismatch between actual number 1 and declared number 2 of ADT parameters for HistoricMerkleTree', 'HistoricMerkleTree<depth, T>'],
+  ['expected structure type, received JubjubPoint', 'jubjubPointX(p)'],
+  ['expected equality-operator left operand type to be an ordinary Compact type but received ADT type Counter', 'ledger type'],
+  ['parse error: found "Integer" looking for ",", ")", or a generic argument list', 'Uint<N>'],
+  ['Uint width 0 is not between 1 and the maximum Uint width 248 (inclusive)', 'Uint<0>'],
+  ['another binding found for send in the same scope at line 2 char 1', 'prefix'],
 ];
 let wrongExplanations = 0;
 for (const [msg, want] of EXPLAIN_EXPECT) {

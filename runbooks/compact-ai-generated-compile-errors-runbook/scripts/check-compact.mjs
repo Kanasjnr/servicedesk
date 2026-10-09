@@ -281,6 +281,17 @@ function definedNames(code) {
   return names;
 }
 
+// Ledger field name -> value type head of a Map whose values are themselves a ledger type (Map<K, Set<T>>).
+function nestedValueTypes(code) {
+  const out = new Map();
+  for (const m of code.matchAll(/\bledger\s+(\w+)\s*:\s*Map\s*</g)) {
+    const open = m.index + m[0].length - 1, end = matchClose(code, open, '<', '>');
+    if (end < 0) continue;
+    const v = splitTop(code.slice(open + 1, end - 1))[1]?.match(/^(\w+)/)?.[1];
+    if (v && has(ADT_METHODS, v)) out.set(m[1], v);
+  }
+  return out;
+}
 function ledgerFields(code) {
   const fields = new Map();
   for (const m of code.matchAll(/\bledger\s+(\w+)\s*:\s*(\w+)/g)) fields.set(m[1], fields.has(m[1]) && fields.get(m[1]) !== m[2] ? null : m[2]);
@@ -333,7 +344,11 @@ function scan(file, src) {
   const findings = [];
   const defined = definedNames(code);
   const fields = ledgerFields(code);
+  const nested = nestedValueTypes(code);
   const lineCol = lineIndex(code);
+  // Bodies of generic modules (`module M<#n> { … }`): the compiler checks them only once the module is used.
+  const genericModules = [...code.matchAll(/\bmodule\s+\w+\s*<[^>{]*>\s*\{/g)].map((g) => [g.index, matchClose(code, g.index + g[0].length - 1, '{', '}')]);
+  const inGenericModule = (i) => genericModules.some(([o, e]) => o < i && i < e);
   // Code from other files (include, or import of anything but the standard library) can define names
   // this file uses, so a name that looks invented is only a warning there.
   const pullsIn = /\binclude\s+"|\bimport\s+(?!(?:\{[^}]*\}\s*from\s+)?CompactStandardLibrary\b)["\w]/.test(code);
@@ -393,8 +408,9 @@ function scan(file, src) {
     if (end > 0 && /^\s*\(\s*\)/.test(code.slice(end))) add(m.index, 'default-parentheses', '`default<T>()` with parentheses.', 'Write `default<T>` without parentheses.');
   });
   each(/(?:[=(,]|\breturn)\s*Bytes\s*<\s*\d+\s*>\s*\{/g, (m) => add(m.index, 'bytes-literal-braces', 'Bytes literals don\'t use braces.', 'Write `Bytes[1, 2, 3]`, `default<Bytes<32>>` or `pad(32, "text")`.'));
+  each(/\bUnsigned\s+Integer\s*\[\s*(\d+)\s*\]/g, (m) => add(m.index, 'old-uint-syntax', `\`${m[0]}\` is older Compact syntax.`, `Write \`Uint<${m[1]}>\`.`));
   each(/\bUint\s*<\s*(\d+)\s*>/g, (m) => {
-    if (Number(m[1]) > 248) add(m.index, 'uint-width', `Uint<${m[1]}> is wider than the maximum, 248 bits.`, 'Use Uint<248> or smaller, or Field.');
+    if (Number(m[1]) > 248) add(m.index, 'uint-width', `Uint<${m[1]}> is wider than the maximum, 248 bits.${inGenericModule(m.index) ? ' (The compiler only reports it once this generic module is used.)' : ''}`, 'Use Uint<248> or smaller, or Field.', inGenericModule(m.index) ? 'warning' : 'error');
     if (Number(m[1]) === 0) add(m.index, 'uint-width', 'Uint<0> isn\'t a type: widths run from 1 to 248.', 'Use Uint<1> or wider.');
   });
   each(/\bsealed\s+export\b|\bledger\s+export\b|\bsealed\s+ledger\s+export\b/g, (m) => add(m.index, 'modifier-order', `\`${m[0]}\`: wrong modifier order.`, 'Write `export sealed ledger name: Type;`.'));
@@ -416,6 +432,8 @@ function scan(file, src) {
     let depth = 0, comma = false;
     for (let j = open + 1; j < end - 1; j++) {
       const ch = code[j];
+      const targs = ch === '<' && /\w/.test(code[j - 1] ?? '') ? code.slice(j, j + 200).match(/^<[^;(){}&|=!]*>(?=\s*\()/) : null;
+      if (targs) { j += targs[0].length - 1; continue; }
       if ('([{'.includes(ch)) depth++; else if (')]}'.includes(ch)) depth--; else if (ch === ',' && depth === 0) comma = true;
     }
     if (!comma) add(m.index, 'assert-message', '`assert` without a message.', 'Write `assert(condition, "message");`.');
@@ -532,6 +550,16 @@ function scan(file, src) {
     add(m.index, 'ledger-method', `${type} has no ${method}().`, `${real ? `Use \`${obj}.${real}(…)\`. ` : ''}${type} methods: ${methods.join(', ')}.`);
   });
 
+  each(/\b(\w+)\s*\.\s*lookup\s*\(/g, (m) => {
+    const type = nested.get(m[1]);
+    if (!type) return;
+    const close = matchClose(code, m.index + m[0].length - 1, '(', ')');
+    const next = close > 0 && code.slice(close).match(/^\s*\.\s*(\w+)\s*\(/);
+    if (!next || ADT_METHODS[type].includes(next[1])) return;
+    const hint = has(METHOD_HINTS, next[1]) && ADT_METHODS[type].includes(METHOD_HINTS[next[1]]) ? ` Use ${METHOD_HINTS[next[1]]}().` : '';
+    add(close, 'ledger-method', `The values of \`${m[1]}\` are ${type}s, and ${type} has no ${next[1]}().`, `${hint.trim()} ${type} methods: ${ADT_METHODS[type].join(', ')}.`.trim());
+  });
+
   // dedupe (same rule, same position)
   const seen = new Set();
   return findings
@@ -561,7 +589,7 @@ function explain(message, line = '') {
   const m = (re) => msg.match(re);
   const on = (re) => re.test(line);
   let r;
-  if ((r = m(/unbound identifier (\w+)/))) {
+  if ((r = m(/unbound identifier ([\w$]+)/))) {
     const n = r[1];
     if (has(ONLY_0350, n)) return `\`${n}\` is newer than Compact 0.31.1, which the networks need. See Remediation 8 in the runbook for the 0.31.1 alternative.`;
     if (has(RENAMED_TYPES, n)) return `\`${n}\` is an old type name: use \`${RENAMED_TYPES[n]}\` (0.31.1 says so; newer compilers dropped the hint).`;
@@ -664,6 +692,10 @@ function explain(message, line = '') {
   if ((r = m(/Uint width (\d+)/))) return r[1] === '0' ? 'Uint widths run from 1 to 248: Uint<0> isn\'t a type.' : 'The widest Uint is Uint<248>.';
   if (m(/MerkleTree depth/)) return 'MerkleTree depth must be between 2 and 32.';
   if ((r = m(/declared number 2 of (?:ADT|generic) parameters for ((?:Historic)?MerkleTree(?:Path)?)/))) return `Write \`${r[1]}<depth, T>\` (\`MerkleTree\`, \`HistoricMerkleTree\` and \`MerkleTreePath\` all take the depth first).`;
+  if ((r = m(/mismatch between actual number (\d+) and declared number (\d+) of (?:ADT|generic) parameters for (\w+)/))) {
+    const form = { Map: 'Map<K, V>', Set: 'Set<T>', List: 'List<T>', Counter: 'Counter (no type arguments)' }[r[3]];
+    return `\`${r[3]}\` takes ${r[2]} type argument(s), not ${r[1]}${form ? `: \`${form}\`` : ''}.`;
+  }
   if ((r = m(/another binding found for (\w+) in the same scope(?: at (line \d+ char \d+))?/))) return `\`${r[1]}\` is already defined${r[2] ? ` (${r[2]}; often the standard library import)` : ''}: rename yours, or import the standard library with a prefix (\`import CompactStandardLibrary prefix S_;\`).`;
   if ((r = m(/circuit (\w+) is marked pure but is actually impure/))) return `A pure circuit can't read or write the ledger: drop \`pure\` from \`${r[1]}\`, or pass the value in as an argument.`;
   if ((r = m(/index (\d+) is out-of-bounds for a vector of length (\d+)/))) return `Vector indexes are checked when compiling: index ${r[1]} doesn't exist in a vector of length ${r[2]} (indexes run from 0 to ${Number(r[2]) - 1}).`;
@@ -689,6 +721,29 @@ function explain(message, line = '') {
   if (m(/expected non-ADT type/)) return 'Ledger types can only nest inside Map values.';
   if (m(/can return without/)) return 'Every path must return: add the else branch.';
   if (m(/unrecognized pragma setting/)) return 'The only pragma is `pragma language_version …;`.';
+  if ((r = m(/expected .* to be an ordinary Compact type but received ADT type (\S+)/))) return `${r[1]} is a ledger type: it only works as a ledger field, through its methods. A value of it can't be compared, or put in a tuple or vector.`;
+  if ((r = m(/expected structure type, received (\S+)/))) return r[1] === 'JubjubPoint' ? 'JubjubPoint has no fields: use `jubjubPointX(p)` and `jubjubPointY(p)`.' : `${r[1]} isn't a struct, so it has no fields to read with a dot.`;
+  if (m(/const binding found in a single-statement context/) || m(/found keyword "const" looking for (?:an expression|a block or an expression)/)) return 'A const is a statement of its own, not part of an expression or a lone if/else branch: write `if (c) { const x = …; … }`, or compute the value with `c ? a : b`.';
+  if (m(/call site ambiguity \(multiple compatible functions\)/)) return 'More than one circuit with this name accepts these arguments: rename one, or give them different parameter types.';
+  if (m(/include cycle involving/)) return 'Files include each other in a loop: include each file once, from the top-level contract.';
+  if (m(/cycle involving (?:modules?|types?)/)) return 'Modules or types refer to each other in a loop: a struct can\'t contain itself, and two modules can\'t import each other.';
+  if (m(/is out of Field range/)) return 'That number is larger than the Field modulus. Use a smaller literal, or keep large constants as Bytes<32>.';
+  if ((r = m(/(?:pad|slice|vector type) length \d+ exceeds the maximum supported length (\d+)/))) return `Lengths are limited to ${r[1]}: use a smaller size.`;
+  if (m(/slice index .* is out-of-bounds|slice index did not reduce to a constant/)) return '`slice<N>(v, i)` needs a constant index, and the slice must fit inside the vector.';
+  if (m(/range (?:start|end) for Uint type|end bound \d+ is less than start bound|range end \d+ for Uint type exceeds/)) return 'A Uint range is `Uint<0..N>`: it starts at 0, N is exclusive and at least 1, and N can be at most 2^248.';
+  if (m(/spread initializer found after positional or named initializers/)) return 'In a struct value, put the spread first: `S { ...other, a: 1 }`.';
+  if ((r = m(/duplicate field name (\w+)/))) return `Two fields are named \`${r[1]}\`: rename one.`;
+  if ((r = m(/no export named (\w+) in module (\w+)/))) return `Module ${r[2]} doesn't export \`${r[1]}\`: mark it \`export\` inside the module, or check the name.`;
+  if (m(/incompatible arguments in call to anonymous circuit/)) return 'The arguments don\'t match the anonymous circuit\'s parameters (count or types).';
+  if (m(/invalid context for reference to (?:function|type alias) name CompactStandardLibrary/)) return 'Import the standard library once (`import CompactStandardLibrary;`) and use its names directly, not as `CompactStandardLibrary.x`.';
+  if (m(/is identical to the exported circuit name .* modulo case/)) return 'Two exported circuits differ only in letter case, which clashes on case-insensitive file systems: rename one.';
+  if (m(/found "Integer" looking for/)) return 'If the type is `Unsigned Integer[N]` (older Compact), write `Uint<N>`.';
+  if ((r = m(/found keyword "for" looking for a program element/))) return 'A for loop can only be inside a circuit or the constructor.';
+  if ((r = m(/expected right-hand side of = to have type (.+?) but received (.+)$/))) return `The value is ${r[2]} but the target is ${r[1]}: make the types match (a cast with \`as\` where one exists).`;
+  if ((r = m(/found "([^"]+)" looking for a program element or end of file/))) return `\`${r[1]}\` starts something that isn't a top-level declaration (pragma, import, include, struct, enum, ledger, witness, circuit, constructor, module). Check for a stray word or a missing \`}\` above it.`;
+  if (m(/looking for a version atom/)) return 'A pragma version is a plain number: `pragma language_version >= 0.22 && <= 0.23;`.';
+  if ((r = m(/found "(\w+)" looking for ",", ";"/))) return `Something is missing before \`${r[1]}\`: usually a \`,\` between two bindings or a \`;\` at the end of the statement.`;
+  if ((r = m(/found keyword "(\w+)" looking for (.*)/))) return `\`${r[1]}\` is a keyword, so it can't be used here (the parser wanted ${r[2]}). Use another name, or check the syntax around it.`;
   return undefined;
 }
 

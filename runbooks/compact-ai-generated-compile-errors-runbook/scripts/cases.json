@@ -194,6 +194,44 @@
    }
   },
   {
+   "slug": "assert-type-args-no-message",
+   "title": "assert without a message, with commas inside type arguments",
+   "category": "syntax",
+   "fix_kind": "syntax",
+   "sources": [
+    "real-contract test of the checker (2026-10-08)"
+   ],
+   "notes": "The static scan used to count the comma inside `persistentHash<Vector<2, Field>>` as the argument separator and miss the missing message.",
+   "files": {
+    "wrong.compact": {
+     "source": "pragma language_version >= 0.22;\nimport CompactStandardLibrary;\nexport ledger h: Bytes<32>;\nexport circuit f(x: Vector<2, Field>): [] {\n  assert(persistentHash<Vector<2, Field>>(x) != h);\n}\n",
+     "results": {
+      "0.31.1": {
+       "exit": 255,
+       "message": "parse error: found \")\" looking for \",\", \"||\", \"&&\", \"==\", \"!=\", \"as\", \"+\", \"-\", \"*\", \"[\", \".\", \"?\", \"=\", \"+=\", \"-=\", \"<\", \"<=\", \">=\", \">\", \"(\", \"{\", or a generic argument list"
+      },
+      "0.35.0": {
+       "exit": 255,
+       "message": "parse error: found \")\" looking for \",\", \"||\", \"&&\", \"==\", \"!=\", \"as\", \"+\", \"-\", \"*\", \"[\", \".\", \"?\", \"=\", \"+=\", \"-=\", \"<\", \"<=\", \">=\", \">\", \"(\", \"{\", or a generic argument list"
+      }
+     }
+    },
+    "right.compact": {
+     "source": "pragma language_version >= 0.22;\nimport CompactStandardLibrary;\nexport ledger h: Bytes<32>;\nexport circuit f(x: Vector<2, Field>): [] {\n  assert(persistentHash<Vector<2, Field>>(x) != h, \"already used\");\n}\n",
+     "results": {
+      "0.31.1": {
+       "exit": 0,
+       "message": ""
+      },
+      "0.35.0": {
+       "exit": 0,
+       "message": ""
+      }
+     }
+    }
+   }
+  },
+  {
    "slug": "assign-widened-arith",
    "title": "Ledger field assigned a widened arithmetic result (e2e: vault)",
    "category": "type/cast",
@@ -3542,6 +3580,44 @@
    }
   },
   {
+   "slug": "jubjubpoint-fields",
+   "title": "Reading .x / .y of a JubjubPoint",
+   "category": "stdlib",
+   "fix_kind": "syntax",
+   "sources": [
+    "real-contract test of the checker (2026-10-08)"
+   ],
+   "notes": "JubjubPoint has no fields (`expected structure type, received JubjubPoint`); the coordinates come from jubjubPointX and jubjubPointY.",
+   "files": {
+    "wrong.compact": {
+     "source": "pragma language_version >= 0.22;\nimport CompactStandardLibrary;\nexport circuit f(p: JubjubPoint): Field { return disclose(p.x); }\n",
+     "results": {
+      "0.31.1": {
+       "exit": 255,
+       "message": "expected structure type, received JubjubPoint"
+      },
+      "0.35.0": {
+       "exit": 255,
+       "message": "expected structure type, received JubjubPoint"
+      }
+     }
+    },
+    "right.compact": {
+     "source": "pragma language_version >= 0.22;\nimport CompactStandardLibrary;\nexport circuit f(p: JubjubPoint): Field { return disclose(jubjubPointX(p)); }\n",
+     "results": {
+      "0.31.1": {
+       "exit": 0,
+       "message": ""
+      },
+      "0.35.0": {
+       "exit": 0,
+       "message": ""
+      }
+     }
+    }
+   }
+  },
+  {
    "slug": "kernel-caller",
    "title": "kernel.caller() used with 0.31.1",
    "category": "version/pragma",
@@ -3773,6 +3849,44 @@
     },
     "right.compact": {
      "source": "pragma language_version >= 0.20;\nimport CompactStandardLibrary;\nexport ledger counter: Counter;\nexport ledger owner: Bytes<32>;\n",
+     "results": {
+      "0.31.1": {
+       "exit": 0,
+       "message": ""
+      },
+      "0.35.0": {
+       "exit": 0,
+       "message": ""
+      }
+     }
+    }
+   }
+  },
+  {
+   "slug": "ledger-type-as-value",
+   "title": "A ledger type used as a value (default<Counter>)",
+   "category": "ledger",
+   "fix_kind": "syntax",
+   "sources": [
+    "real-contract test of the checker (2026-10-08)"
+   ],
+   "notes": "`default<Counter>` alone compiles (the value is unused), but comparing it, or putting a Map value in a tuple or vector, gives `expected \u2026 to be an ordinary Compact type but received ADT type \u2026`. Ledger types only work as ledger fields, through their methods.",
+   "files": {
+    "wrong.compact": {
+     "source": "pragma language_version >= 0.22;\nimport CompactStandardLibrary;\nexport ledger c: Counter;\nexport circuit f(): Boolean { const z = default<Counter>; return z == z; }\n",
+     "results": {
+      "0.31.1": {
+       "exit": 255,
+       "message": "expected equality-operator left operand type to be an ordinary Compact type but received ADT type Counter"
+      },
+      "0.35.0": {
+       "exit": 255,
+       "message": "expected equality-operator left operand type to be an ordinary Compact type but received ADT type Counter"
+      }
+     }
+    },
+    "right.compact": {
+     "source": "pragma language_version >= 0.22;\nimport CompactStandardLibrary;\nexport ledger c: Counter;\nexport circuit f(): Boolean { return c.lessThan(1); }\n",
      "results": {
       "0.31.1": {
        "exit": 0,
@@ -4092,6 +4206,57 @@
       "pass": true
      }
     ]
+   }
+  },
+  {
+   "slug": "map-one-type-argument",
+   "title": "Map with one type argument",
+   "category": "ledger",
+   "fix_kind": "syntax",
+   "sources": [
+    "real-contract test of the checker (2026-10-08)"
+   ],
+   "notes": "`Map<Bytes<32>>` gives `mismatch between actual number 1 and declared number 2 of ADT parameters for Map`; a Map is `Map<K, V>`. A Set takes one.",
+   "files": {
+    "wrong.compact": {
+     "source": "pragma language_version >= 0.22;\nimport CompactStandardLibrary;\nexport ledger m: Map<Bytes<32>>;\n",
+     "results": {
+      "0.31.1": {
+       "exit": 255,
+       "message": "mismatch between actual number 1 and declared number 2 of ADT parameters for Map"
+      },
+      "0.35.0": {
+       "exit": 255,
+       "message": "mismatch between actual number 1 and declared number 2 of ADT parameters for Map"
+      }
+     }
+    },
+    "right.compact": {
+     "source": "pragma language_version >= 0.22;\nimport CompactStandardLibrary;\nexport ledger m: Map<Bytes<32>, Boolean>;\n",
+     "results": {
+      "0.31.1": {
+       "exit": 0,
+       "message": ""
+      },
+      "0.35.0": {
+       "exit": 0,
+       "message": ""
+      }
+     }
+    },
+    "right2.compact": {
+     "source": "pragma language_version >= 0.22;\nimport CompactStandardLibrary;\nexport ledger m: Set<Bytes<32>>;\n",
+     "results": {
+      "0.31.1": {
+       "exit": 0,
+       "message": ""
+      },
+      "0.35.0": {
+       "exit": 0,
+       "message": ""
+      }
+     }
+    }
    }
   },
   {
@@ -5274,6 +5439,44 @@
    }
   },
   {
+   "slug": "nested-map-method",
+   "title": "Method a nested Map value does not have",
+   "category": "ledger",
+   "fix_kind": "syntax",
+   "sources": [
+    "real-contract test of the checker (2026-10-08)"
+   ],
+   "notes": "m.lookup(a).get(b) on a Map whose values are Maps: the inner Map has lookup, not get.",
+   "files": {
+    "wrong.compact": {
+     "source": "pragma language_version >= 0.22;\nimport CompactStandardLibrary;\nexport ledger m: Map<Bytes<32>, Map<Bytes<32>, Uint<64>>>;\nexport circuit f(a: Bytes<32>, b: Bytes<32>): Uint<64> {\n  return m.lookup(disclose(a)).get(disclose(b));\n}\n",
+     "results": {
+      "0.31.1": {
+       "exit": 255,
+       "message": "operation get undefined for ledger field type Map<Bytes<32>, Uint<64>>"
+      },
+      "0.35.0": {
+       "exit": 255,
+       "message": "operation get undefined for ledger field type Map<Bytes<32>, Uint<64>>"
+      }
+     }
+    },
+    "right.compact": {
+     "source": "pragma language_version >= 0.22;\nimport CompactStandardLibrary;\nexport ledger m: Map<Bytes<32>, Map<Bytes<32>, Uint<64>>>;\nexport circuit f(a: Bytes<32>, b: Bytes<32>): Uint<64> {\n  return m.lookup(disclose(a)).lookup(disclose(b));\n}\n",
+     "results": {
+      "0.31.1": {
+       "exit": 0,
+       "message": ""
+      },
+      "0.35.0": {
+       "exit": 0,
+       "message": ""
+      }
+     }
+    }
+   }
+  },
+  {
    "slug": "newer-compiler-features",
    "title": "0.35.0-only stdlib names used with 0.31.1 (keccak256, JubjubSchnorrSignature, ecNeg, PublicAddress, JubjubScalar, kernel.caller)",
    "category": "version/pragma",
@@ -5629,6 +5832,44 @@
     },
     "right.compact": {
      "source": "pragma language_version >= 0.20;\nimport CompactStandardLibrary;\nexport ledger seen: Set<Bytes<32>>;\nexport circuit deposit(coin: ShieldedCoinInfo): [] {\n  receiveShielded(disclose(coin));\n}\nexport circuit pay(coin: QualifiedShieldedCoinInfo, to: ZswapCoinPublicKey, amount: Uint<128>): [] {\n  sendShielded(disclose(coin), left<ZswapCoinPublicKey, ContractAddress>(disclose(to)), disclose(amount));\n}\nexport circuit mint(nonce: Bytes<32>, amount: Uint<64>): [] {\n  mintShieldedToken(pad(32, \"mytoken\"), disclose(amount), disclose(nonce), right<ZswapCoinPublicKey, ContractAddress>(kernel.self()));\n}\nexport circuit burn(coin: QualifiedShieldedCoinInfo, amount: Uint<128>): [] {\n  sendShielded(disclose(coin), shieldedBurnAddress(), disclose(amount));\n}\nexport circuit digest(x: Field): Bytes<32> {\n  return disclose(persistentHash<Field>(x));\n}\nexport circuit me(): ZswapCoinPublicKey {\n  return disclose(ownPublicKey());\n}\nexport circuit nothingSeen(): Boolean {\n  return seen.isEmpty();\n}\n",
+     "results": {
+      "0.31.1": {
+       "exit": 0,
+       "message": ""
+      },
+      "0.35.0": {
+       "exit": 0,
+       "message": ""
+      }
+     }
+    }
+   }
+  },
+  {
+   "slug": "old-uint-syntax",
+   "title": "Unsigned Integer[N] from older Compact",
+   "category": "older-compact",
+   "fix_kind": "syntax",
+   "sources": [
+    "real-contract test of the checker (2026-10-08)"
+   ],
+   "notes": "`Unsigned Integer[64]` gives `found \"Integer\" looking for \",\", \")\", or a generic argument list`; the type is `Uint<64>`.",
+   "files": {
+    "wrong.compact": {
+     "source": "pragma language_version >= 0.22;\nimport CompactStandardLibrary;\nexport ledger n: Uint<64>;\nexport circuit f(x: Unsigned Integer[64]): [] { n = disclose(x); }\n",
+     "results": {
+      "0.31.1": {
+       "exit": 255,
+       "message": "parse error: found \"Integer\" looking for \",\", \")\", or a generic argument list"
+      },
+      "0.35.0": {
+       "exit": 255,
+       "message": "parse error: found \"Integer\" looking for \",\", \")\", or a generic argument list"
+      }
+     }
+    },
+    "right.compact": {
+     "source": "pragma language_version >= 0.22;\nimport CompactStandardLibrary;\nexport ledger n: Uint<64>;\nexport circuit f(x: Uint<64>): [] { n = disclose(x); }\n",
      "results": {
       "0.31.1": {
        "exit": 0,
