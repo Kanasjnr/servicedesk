@@ -557,7 +557,8 @@ function checkSource(file) {
     }
     const argText = src.slice(m.index + m[0].length, end);
     if (!/\{/.test(argText)) continue; // config built elsewhere; tsc will say
-    const missing = ['privateStoragePasswordProvider', 'accountId'].filter((k) => !new RegExp(`\\b${k}\\b`).test(argText));
+    const required = { privateStoragePasswordProvider: /\bprivateStoragePasswordProvider\b/, accountId: /\baccountId\b/ };
+    const missing = Object.keys(required).filter((k) => !required[k].test(argText));
     const wp = argText.search(/\bwalletProvider\b/);
     if (wp >= 0) add(file, lineAt(m.index + m[0].length + wp), '`levelPrivateStateProvider` takes no `walletProvider` (TS2353). It needs `privateStoragePasswordProvider` and `accountId` instead.');
     if (missing.length) add(file, lineAt(m.index), `\`levelPrivateStateProvider\` in midnight-js 4.x requires ${missing.map((k) => `\`${k}\``).join(' and ')}: \`privateStoragePasswordProvider\` is an async function returning the password that encrypts the store, \`accountId\` identifies the store (for example the wallet address).`);
