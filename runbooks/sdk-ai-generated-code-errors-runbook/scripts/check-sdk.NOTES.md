@@ -185,6 +185,22 @@ didn't check the browser files' wallet calls. Its bundler pass did, and it found
 re-exports. That's why the index lists no exports for it, and the checker's renames table covers
 its names instead.
 
+**Upstream status.** The fix is
+[midnight-dapp-connector-api#61](https://github.com/midnightntwrk/midnight-dapp-connector-api/pull/61),
+merged 2026-08-05 as commit `3bed777`. As of 2026-10-11 no stable release has it: 4.0.1 and
+4.1.0-beta.1 (tagged 2026-07-02) are older, and npm's `latest` is still 4.0.1. The test file
+above was re-run on a clean install, with only the connector and TypeScript, under NodeNext with
+`skipLibCheck`:
+
+| dapp-connector-api | TypeScript 5.6.3 | TypeScript 7.0.2 |
+|---|---|---|
+| 4.0.1 | 1 error (`window.midnight`); the three wrong lines compile | the same |
+| `4.1.0-canary.20260819082604-3b622cb` | the three expected errors; `window.midnight` typed | the same |
+
+The two builds differ in `dist/index.d.ts`, where 4.0.1 has `from './api'` and the canary
+`from './api.js'`. The checker uses that as its test: when the connector is installed next to a
+NodeNext tsconfig, it reads that file and reports nothing if the imports carry `.js`.
+
 ## Checking the fixes
 
 `cases/right-forms.ts` holds the form the checker recommends for each mistake: imports from
@@ -286,9 +302,13 @@ a Compact compiler error, which the checker must decline with exit 2.
 
 ## Re-running
 
-`node test-check-sdk.mjs` takes about 10 s with no install. It checks three things: the flagged
-lines for each corpus file against `cases/expected.json`, no findings on `right-forms.ts`, and the
-33 explain cases.
+`node test-check-sdk.mjs` takes about 10 s with no install. It checks four things:
+- the flagged lines for each corpus file against `cases/expected.json`;
+- no findings on `right-forms.ts`;
+- the 33 explain cases;
+- the connector tsconfig check in three setups, built from the two `index.d.ts` forms above:
+  4.0.1 installed (reported), the fixed canary installed (silent), and nothing installed
+  (reported, with the status note).
 
 `node test-check-sdk.mjs --tsc <dir>` also re-checks the ground truth. `<dir>` must have the
 network set, `typescript` 5.6.3 and `@types/node` installed. The run takes about 2 minutes:

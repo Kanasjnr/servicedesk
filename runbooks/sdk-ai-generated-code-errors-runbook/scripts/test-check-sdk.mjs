@@ -6,6 +6,9 @@
  *    must match cases/expected.json `checker_lines`.
  * 2. cases/right-forms.ts, the form the checker recommends for each mistake: no findings.
  * 3. cases/explain.json: each real error text gets the expected explanation and exit code.
+ * 4. A NodeNext project that uses the DApp connector: flagged with 4.0.1 installed (its index.d.ts imports
+ *    without extensions), not flagged with a fixed build installed (`.js` imports, midnight-dapp-connector-api#61),
+ *    flagged with the status note when nothing is installed. Built in a temporary directory, removed afterwards.
  *
  * With --tsc <dir>, where <dir> has the network set and typescript installed (see check-sdk.NOTES.md),
  * it also re-checks the ground truth: compiles cases/contract/counter.compact with Compact 0.31.1, runs
@@ -22,6 +25,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
+import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -76,7 +80,41 @@ for (const c of explainCases) {
 }
 console.log(`explain: ${explained} of ${explainCases.length} cases`);
 
-// ---------- 4. optional: the ground truth, with tsc and the compiler ----------
+// ---------- 4. the DApp connector under NodeNext, by what's installed ----------
+{
+  // The first lines of dist/index.d.ts in 4.0.1 and in the canary that has the fix.
+  const BROKEN = "import './globals';\nexport type { InitialAPI, ConnectedAPI } from './api';\nexport { ErrorCodes } from './errors';\n";
+  const FIXED = "export * from './globals.js';\nexport type { InitialAPI, ConnectedAPI } from './api.js';\nexport { ErrorCodes } from './errors.js';\n";
+  const setups = [
+    { name: '4.0.1 installed', version: '4.0.1', dts: BROKEN, expect: 'Installed: dapp-connector-api 4.0.1' },
+    { name: 'fixed canary installed', version: '4.1.0-canary.20260819082604-3b622cb', dts: FIXED, expect: null },
+    { name: 'nothing installed', version: '4.0.1', dts: null, expect: 'midnight-dapp-connector-api#61' },
+  ];
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'check-sdk-connector-'));
+  try {
+    for (const t of setups) {
+      const dir = path.join(tmp, t.name.replace(/\W+/g, '-'));
+      fs.mkdirSync(dir);
+      fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ type: 'module', dependencies: { '@midnight-ntwrk/dapp-connector-api': t.version } }));
+      fs.writeFileSync(path.join(dir, 'tsconfig.json'), JSON.stringify({ compilerOptions: { module: 'NodeNext', moduleResolution: 'NodeNext', skipLibCheck: true } }));
+      fs.writeFileSync(path.join(dir, 'app.ts'), "import type { InitialAPI } from '@midnight-ntwrk/dapp-connector-api';\nexport type W = InitialAPI;\n");
+      if (t.dts) {
+        const pkg = path.join(dir, 'node_modules', '@midnight-ntwrk', 'dapp-connector-api');
+        fs.mkdirSync(path.join(pkg, 'dist'), { recursive: true });
+        fs.writeFileSync(path.join(pkg, 'package.json'), JSON.stringify({ name: '@midnight-ntwrk/dapp-connector-api', version: t.version }));
+        fs.writeFileSync(path.join(pkg, 'dist', 'index.d.ts'), t.dts);
+      }
+      const r = spawnSync(process.execPath, [CHECKER, dir], { encoding: 'utf8' });
+      const ok = t.expect ? r.status === 2 && r.stdout.includes(t.expect) : r.status === 0;
+      if (!ok) fail(`connector (${t.name})`, `exit ${r.status}: ${r.stdout.trim().slice(0, 200)}`);
+    }
+    console.log(`connector under NodeNext: ${setups.length} setups`);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+// ---------- 5. optional: the ground truth, with tsc and the compiler ----------
 if (tscDir) {
   const dir = path.resolve(tscDir);
   let tsc;

@@ -169,7 +169,8 @@ tasks and across models, which is what makes them worth a runbook. They fall int
      resolution doesn't load those. With `skipLibCheck`, a common setting, every connector type is
      then silently `any`. `const c: ConnectedAPI = 42` compiles, and so does any wrong
      wallet call. Under `"moduleResolution": "bundler"`, which Vite uses, the types load and the
-     mistakes show.
+     mistakes show. This is fixed upstream but not released; see Upstream follow-ups for the
+     status and how to check it.
    - **Conflicting declarations.** Models often add their own `declare global { interface Window
      { midnight?: { mnLace?: … } } }`. Where the package's declaration loads, any type but
      `{ [key: string]: InitialAPI }` fails with TS2717.
@@ -238,7 +239,8 @@ tasks and across models, which is what makes them worth a runbook. They fall int
    - each imported name the network set doesn't export, with where it lives now, what it was
      renamed to, or that it looks invented;
    - the call shapes in Root cause 3 and 5;
-   - a NodeNext tsconfig in a project that uses the DApp connector.
+   - a NodeNext tsconfig in a project that uses the DApp connector. If the connector is installed,
+     the checker reads its `dist/index.d.ts` and stays quiet once that version has the fix.
 
    Workspace packages are recognised and skipped. Exit code 0 means no findings, 2 means at least
    one, and 1 means it couldn't run. On a two-file project built from one corpus answer's pins and
@@ -400,7 +402,9 @@ tasks and across models, which is what makes them worth a runbook. They fall int
      `walletId` is the wallet's key under `window.midnight`. Read keys and addresses from the
      returned `ConnectedAPI` (for example `getShieldedAddresses()`); there is no `enable()`.
    - **Set `"moduleResolution": "bundler"`** (and `"module": "ESNext"`) in the browser package's
-     tsconfig, as Vite templates do. Under NodeNext the connector's types are `any`.
+     tsconfig, as Vite templates do. Under NodeNext, 4.0.1's types are `any`. This step stops
+     being needed once a stable release with the fix is in the support matrix; see Upstream
+     follow-ups for how to check.
    - **Delete any `Window.midnight` declaration** of your own. If a NodeNext build needs one, it
      must be exactly `midnight?: { [key: string]: InitialAPI }`.
 
@@ -416,10 +420,24 @@ tasks and across models, which is what makes them worth a runbook. They fall int
 
 ## Upstream follow-ups
 
-- **`dapp-connector-api` 4.0.1's typings under NodeNext:** the extensionless re-exports in
-  `dist/index.d.ts` make every connector type `any` with `skipLibCheck`, and give TS2834 without
-  it (Root cause 5). Fix: `./api.js`, `./errors.js`, `./globals.js`. To be filed against
-  `midnightntwrk/midnight-dapp-connector-api`.
+- **`dapp-connector-api` typings under NodeNext (Root cause 5): fixed upstream, not yet
+  released.**
+  - **The fix:** [midnight-dapp-connector-api#61](https://github.com/midnightntwrk/midnight-dapp-connector-api/pull/61),
+    merged 2026-08-05 (commit `3bed777`). It adds `.js` to the internal imports and also
+    declares `midnight` on `globalThis`.
+  - **Where it is, as of 2026-10-11:** no stable release has it. 4.0.1 (the network set, npm
+    `latest`) and 4.1.0-beta.1 were built before it; only the `canary` builds from 2026-08-19 on
+    have it. Checked on a clean install with TypeScript 5.6.3 and 7.0.2: on 4.0.1 three wrong
+    connector lines compile, and on the canary all three are errors.
+  - **How to tell whether a version has it.** These checks need no API key:
+    - `npm view @midnight-ntwrk/dapp-connector-api dist-tags` shows whether a stable version
+      newer than 4.0.1 exists.
+    - The support matrix shows which version the networks use.
+    - The installed `node_modules/@midnight-ntwrk/dapp-connector-api/dist/index.d.ts` decides it:
+      `from './api.js'` means fixed, `from './api'` means not.
+  - **When a stable release with the fix is in the matrix,** NodeNext projects get the connector's
+    types again. The `bundler` advice in Remediation 4 then becomes optional, and the checker's
+    tsconfig finding stops on its own once that version is installed.
 - **[midnight-wallet#791](https://github.com/midnightntwrk/midnight-wallet/issues/791):** move
   `latest` on `@midnight-ntwrk/wallet-sdk` to 1.2.0 (open). Until it lands, `^1` ranges install
   1.1.0.

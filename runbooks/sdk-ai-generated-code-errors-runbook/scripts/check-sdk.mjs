@@ -154,7 +154,7 @@ const SHAPE_RULES = [
 const FILE_RULES = {
   'connector-enable': '`enable()` is the dapp-connector-api 1.x–3.0 API. In 4.0.1 the object at `window.midnight.<wallet id>` is an `InitialAPI`: call `await initial.connect(networkId)` (for example `connect(\'preprod\')`), which returns the `ConnectedAPI` (TS2339 `Property \'enable\' does not exist on type \'InitialAPI\'` once the package\'s types load).',
   'window-midnight-declaration': 'dapp-connector-api 4.0.1 already declares `window.midnight` as `{ [key: string]: InitialAPI }`. A declaration with any other type fails with TS2717 (`Subsequent property declarations must have the same type`) wherever the package\'s types load, as in Vite and other `bundler` setups. Declare it exactly that way, or not at all.',
-  'connector-nodenext': '`@midnight-ntwrk/dapp-connector-api` 4.0.1 re-exports `./api`, `./errors` and `./globals` without file extensions, and TypeScript\'s NodeNext (and Node16) resolution doesn\'t load them. `window.midnight` is then undeclared (TS2339), and with `skipLibCheck` every type the package exports (`InitialAPI`, `ConnectedAPI` …) is silently `any`, so wrong wallet calls compile; without `skipLibCheck`, tsc reports TS2834 inside the package. Typecheck browser code with `"moduleResolution": "bundler"` (what Vite uses), where the types load.',
+  'connector-nodenext': '`@midnight-ntwrk/dapp-connector-api` 4.0.1 re-exports `./api`, `./errors` and `./globals` without file extensions, and TypeScript\'s NodeNext (and Node16) resolution doesn\'t load them. `window.midnight` is then undeclared (TS2339), and with `skipLibCheck` every type the package exports (`InitialAPI`, `ConnectedAPI` …) is silently `any`, so wrong wallet calls compile; without `skipLibCheck`, tsc reports TS2834 inside the package. Typecheck browser code with `"moduleResolution": "bundler"` (what Vite uses), where the types load. Status: fixed upstream in midnightntwrk/midnight-dapp-connector-api#61 (merged 2026-08-05) but in no stable release as of 2026-10-11 (only the `canary` builds from 2026-08-19 have it). To see whether the installed version has the fix, open `node_modules/@midnight-ntwrk/dapp-connector-api/dist/index.d.ts`: `from \'./api.js\'` means fixed, `from \'./api\'` means not.',
 };
 const rule = (id) => SHAPE_RULES.find((r) => r.id === id)?.msg ?? FILE_RULES[id];
 
@@ -401,6 +401,21 @@ function checkRegistryConfig(file) {
 
 // tsconfig: NodeNext/Node16 resolution can't load dapp-connector-api 4.0.1's types (reported after the scan, if the
 // project uses the connector). `extends` isn't followed; a config that sets neither option is left alone.
+// If the connector is installed next to the config, its index.d.ts decides: extensionless relative imports are the
+// bug, `.js` ones the fix (midnight-dapp-connector-api#61), so the finding goes away once a fixed version is installed.
+function installedConnector(fromDir) {
+  for (let d = path.resolve(fromDir); ; d = path.dirname(d)) {
+    for (const scope of ['@midnight-ntwrk', '@midnightntwrk']) {
+      const dir = path.join(d, 'node_modules', scope, 'dapp-connector-api');
+      const dts = path.join(dir, 'dist', 'index.d.ts');
+      if (fs.existsSync(dts)) {
+        const specs = [...fs.readFileSync(dts, 'utf8').matchAll(/(?:from|import)\s+['"](\.\.?\/[^'"]+)['"]/g)].map((x) => x[1]);
+        return { version: readJson(path.join(dir, 'package.json'))?.version, broken: specs.some((x) => !/\.(?:m|c)?js$|\.json$/.test(x)) };
+      }
+    }
+    if (path.dirname(d) === d) return null;
+  }
+}
 function checkTsconfig(file) {
   const text = fs.readFileSync(file, 'utf8');
   let cfg;
@@ -576,7 +591,13 @@ for (const f of files) {
     add(f, 0, `could not read: ${e.message}`);
   }
 }
-if (usesConnector) for (const c of nodeNextConfigs) add(c.file, c.line, rule('connector-nodenext'));
+if (usesConnector) {
+  for (const c of nodeNextConfigs) {
+    const inst = installedConnector(path.dirname(c.file));
+    if (inst && !inst.broken) continue; // the installed version has the fix
+    add(c.file, c.line, `${inst ? `Installed: dapp-connector-api ${inst.version}, whose index.d.ts still imports without extensions. ` : ''}${rule('connector-nodenext')}`);
+  }
+}
 const fileOrder = new Map(files.map((f, i) => [f, i]));
 const uniq = [...new Map(findings.map((f) => [`${f.file}:${f.line}:${f.msg}`, f])).values()].sort(
   (a, b) => (fileOrder.get(a.file) ?? 0) - (fileOrder.get(b.file) ?? 0) || a.line - b.line,
