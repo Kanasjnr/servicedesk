@@ -18,7 +18,7 @@ _Compiled 2026-10-13 from measurements on Preprod through Blockfrost (method and
 - _moth-wallet's field guide, `shieldedtech/moth-wallet` at `189f0c9`:
   `docs/patterns/preseed-sync-acceleration.md`_
 - _midnight-examples `FAST-SYNC.md` and its `preseed/` snapshots at `2f4912f`_
-- _example-bboard at `f9df09a`_
+- _the log lines quoted from an older example CLI: example-bboard at `f9df09a`_
 
 _Event counts, rates and snapshot ages change daily. Re-check them before quoting them._
 
@@ -28,7 +28,7 @@ _Event counts, rates and snapshot ages change daily. Re-check them before quotin
 
 | What you see | What it means |
 |---|---|
-| `Waiting to receive tokens...` for an hour or more on Preprod; example-bboard's README says *"Wait 1-2 minutes"* | Normal for a fresh wallet: it is replaying about 1.6 million DUST events (→ 1) |
+| `Waiting to receive tokens...` for an hour or more on Preprod, where an older example's README said *"Wait 1-2 minutes"* | Normal for a fresh wallet: it is replaying about 1.6 million DUST events (→ 1) |
 | The same hour again after every restart | The app doesn't save wallet state (→ 2) |
 | `RPC-CORE: subscribeRuntimeVersion(): RuntimeVersion:: disconnected from wss://rpc.midnight-preprod.blockfrost.io/?project_id=…: 1000:: Normal Closure` | Harmless: the node RPC socket closed normally and the wallet reconnects (→ 3) |
 | `Wallet.Sync: [object ErrorEvent]`, a few at a time | A sub-wallet's indexer connection dropped; it retries on its own (→ 3) |
@@ -59,9 +59,9 @@ _Event counts, rates and snapshot ages change daily. Re-check them before quotin
    - **Preview is much faster**, because its tree is smaller: moth-wallet measured 103 s.
 2. **Nothing is kept between runs unless the app saves it.** Each sub-wallet can write its position
    and state with `serializeState()` (or `state.serialize()`) and continue from there with
-   `restore()`: the DUST wallet resumes from the saved `appliedIndex`. Apps that only keep the seed
-   start from zero every time. example-bboard is one of them: it rebuilds the wallet from the seed on
-   every start and saves nothing.
+   `restore()`: the DUST wallet resumes from the saved `appliedIndex`. Apps that only keep the seed,
+   older example CLIs among them, rebuild the wallet from it on every start and sync from zero each
+   time.
 3. **The progress signals are easy to misread.**
    - `appliedIndex` is the id of the last DUST (or shielded) event applied, an event counter. It is
      not a block height.
@@ -79,7 +79,7 @@ _Event counts, rates and snapshot ages change daily. Re-check them before quotin
      sub-wallet retries, starting 1 s later and doubling each time
      (`wallet-sdk-dust-wallet/dist/v1/RunningV1Variant.js:81-86`), and in our runs it was back within
      a second or two. When it isn't, see cause 4.
-   - Booleans alone, like example-bboard's `shielded=false … dust=false`, can't tell a slow sync from
+   - Booleans alone, like `shielded=false … dust=false` in an older example's log, can't tell a slow sync from
      a stuck one. Only a moving `appliedIndex` can.
 4. **A real stall: in wallet SDK 1.2.0 a sync can stop after the machine sleeps, and not start
    again.** Each sub-wallet retries a failed indexer subscription, and usually that works. When it
@@ -244,9 +244,10 @@ _Event counts, rates and snapshot ages change daily. Re-check them before quotin
 ## Remediation
 
 1. **Iterate on a local chain, and save Preprod for the final check.** A local network has almost
-   no DUST history, so a wallet syncs in seconds. In example-bboard, `npm run standalone` in
-   `bboard-cli` runs the same CLI against testkit-js's local environment, and offers the local dev
-   node's pre-funded genesis wallet. `midnight-local-dev` gives the same for any app.
+   no DUST history, so a wallet syncs in seconds. Every example in midnight-examples runs locally:
+   `yarn env:up` starts a node, indexer and proof server from the example's `compose.yml`, and
+   `yarn test:local` runs it with the local network's pre-funded wallets. `midnight-local-dev` gives
+   the same for any app.
 
    *Trade-off:* a local chain won't show Preprod-only problems such as the shut-down endpoints or
    faucet outages.
@@ -332,7 +333,7 @@ _Event counts, rates and snapshot ages change daily. Re-check them before quotin
    repeats `values inserted non-linearly…`, delete the saved state and sync from the start once.
    For a brand-new wallet, a fresh snapshot is the faster alternative.
 7. **Strip the project id before pasting logs.** The `RPC-CORE` lines print the node URL with its
-   `project_id`, and example-bboard also logs the wallet seed. Remove both, or rotate the project
+   `project_id`, and some older example CLIs also log the wallet seed. Remove both, or rotate the project
    id, before sharing a log.
 
 ## Upstream follow-ups
@@ -350,9 +351,9 @@ _Event counts, rates and snapshot ages change daily. Re-check them before quotin
   blocked until Ledger 9): the saved DUST state keeps growing.
 - **[midnight-wallet#288](https://github.com/midnightntwrk/midnight-wallet/issues/288)** (done in
   2.x): DUST sync without replaying the chain.
-- **example-bboard** (not filed): its README says funding takes 1-2 minutes, it saves no wallet
-  state, it logs sync progress only at debug level, its `standalone` mode isn't in the README, and
-  it logs the wallet seed and the contract's secret key.
+- **Example code:** use midnight-examples. Its `FAST-SYNC.md` and `packages/fast-sync` start new
+  wallets from a snapshot, and its examples log sync progress as numbers and don't log the seed. It
+  doesn't save a wallet's own state between runs either; Remediation 2 covers that.
 
 ## Reference material
 
@@ -370,7 +371,7 @@ _Event counts, rates and snapshot ages change daily. Re-check them before quotin
   - [servicedesk#104](https://github.com/midnightntwrk/servicedesk/issues/104): a fresh Preprod wallet
     never finished its first sync; fixed in wallet SDK 1.2.0.
   - Technical Moderator reports, weeks 35 and 36: a funding example's "1 to 2 minutes" took about 6.5
-    hours; example-bboard repeated an hour-long sync on every restart; healthy reconnect lines read
+    hours; an example CLI repeated an hour-long sync on every restart; healthy reconnect lines read
     as failures.
 - **Upstream:** [midnight-wallet#742](https://github.com/midnightntwrk/midnight-wallet/issues/742),
   [#743](https://github.com/midnightntwrk/midnight-wallet/issues/743),
