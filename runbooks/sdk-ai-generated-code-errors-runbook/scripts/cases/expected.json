@@ -1,0 +1,990 @@
+{
+ "recorded": "2026-10-11",
+ "against": "midnight-js 4.1.1, wallet SDK 1.2.0 (@midnight-ntwrk), compact-runtime 0.16.0, dapp-connector-api 4.0.1, testkit-js 4.1.1; TypeScript 5.6.3, moduleResolution NodeNext, one file per run; the .tsx (browser) files also with moduleResolution bundler and the DOM lib (tsc_bundler), as Vite resolves them",
+ "files": {
+  "haiku/t01.ts": {
+   "deps": "@midnight-ntwrk/wallet@4.0.0, @midnight-ntwrk/wallet-sdk-address-format@1.0.0, @midnight-ntwrk/ledger@4.0.0, @midnight-ntwrk/zswap@4.0.0, @midnight-ntwrk/midnight-js-network-id@3.0.0, @midnight-ntwrk/midnight-js-node-zk-config-provider@3.0.0, rxjs@7.8.1, ws@8.18.0",
+   "tsc": [
+    {
+     "line": 3,
+     "code": "TS2307",
+     "message": "Cannot find module '@midnight-ntwrk/wallet' or its corresponding type declarations."
+    },
+    {
+     "line": 32,
+     "code": "TS2339",
+     "message": "Property 'syncProgress' does not exist on type 'unknown'."
+    },
+    {
+     "line": 35,
+     "code": "TS2339",
+     "message": "Property 'unshielded' does not exist on type 'unknown'."
+    },
+    {
+     "line": 35,
+     "code": "TS2339",
+     "message": "Property 'unshielded' does not exist on type 'unknown'."
+    },
+    {
+     "line": 36,
+     "code": "TS2339",
+     "message": "Property 'dust' does not exist on type 'unknown'."
+    },
+    {
+     "line": 38,
+     "code": "TS2339",
+     "message": "Property 'unshielded' does not exist on type 'unknown'."
+    }
+   ],
+   "checker_lines": [
+    3,
+    26
+   ]
+  },
+  "haiku/t02.ts": {
+   "deps": "@midnight-ntwrk/midnight-js-contracts@3.0.0, @midnight-ntwrk/midnight-js-indexer-public-data-provider@3.0.0, @midnight-ntwrk/midnight-js-level-private-state-provider@3.0.0, @midnight-ntwrk/midnight-js-node-zk-config-provider@3.0.0, @midnight-ntwrk/midnight-js-http-client-proof-provider@3.0.0, @midnight-ntwrk/midnight-js-network-id@3.0.0, @midnight-ntwrk/midnight-js-types@3.0.0, @midnight-ntwrk/wallet@4.0.0, @midnight-ntwrk/compact-runtime@0.9.0, ws@8.18.0",
+   "tsc": [
+    {
+     "line": 4,
+     "code": "TS2307",
+     "message": "Cannot find module '@midnight-ntwrk/wallet' or its corresponding type declarations."
+    },
+    {
+     "line": 10,
+     "code": "TS2724",
+     "message": "'\"@midnight-ntwrk/midnight-js-contracts\"' has no exported member named 'createProviders'. Did you mean 'ContractProviders'?"
+    },
+    {
+     "line": 10,
+     "code": "TS2459",
+     "message": "Module '\"@midnight-ntwrk/midnight-js-contracts\"' declares 'MidnightProviders' locally, but it is not exported."
+    },
+    {
+     "line": 11,
+     "code": "TS2307",
+     "message": "Cannot find module './wallet-providers.js' or its corresponding type declarations."
+    },
+    {
+     "line": 12,
+     "code": "TS2307",
+     "message": "Cannot find module './types.js' or its corresponding type declarations."
+    },
+    {
+     "line": 46,
+     "code": "TS2345",
+     "message": "Argument of type '{ privateStateStoreName: string; }' is not assignable to parameter of type 'Partial<LevelPrivateStateProviderConfig> & Pick<LevelPrivateStateProviderConfig, \"privateStoragePasswordProvider\" | \"accountId\">'."
+    }
+   ],
+   "checker_lines": [
+    4,
+    10,
+    33,
+    46
+   ]
+  },
+  "haiku/t03.ts": {
+   "deps": "@midnight-ntwrk/midnight-js-contracts@3.0.0, @midnight-ntwrk/midnight-js-network-id@3.0.0, @midnight-ntwrk/compact-runtime@0.9.0, @midnight-ntwrk/wallet@4.0.0, @midnight-ntwrk/midnight-js-indexer-public-data-provider@3.0.0, @midnight-ntwrk/midnight-js-level-private-state-provider@3.0.0, @midnight-ntwrk/midnight-js-node-zk-config-provider@3.0.0, @midnight-ntwrk/midnight-js-http-client-proof-provider@3.0.0, ws@8.18.0",
+   "tsc": [
+    {
+     "line": 7,
+     "code": "TS2307",
+     "message": "Cannot find module './providers.js' or its corresponding type declarations."
+    }
+   ],
+   "checker_lines": []
+  },
+  "haiku/t04.ts": {
+   "deps": "@midnight-ntwrk/midnight-js-contracts@3.0.0, @midnight-ntwrk/midnight-js-network-id@3.0.0, @midnight-ntwrk/compact-runtime@0.9.0, @midnight-ntwrk/compact-js@2.0.0, @midnight-ntwrk/wallet@4.0.0, @midnight-ntwrk/midnight-js-indexer-public-data-provider@3.0.0, @midnight-ntwrk/midnight-js-level-private-state-provider@3.0.0, @midnight-ntwrk/midnight-js-node-zk-config-provider@3.0.0, @midnight-ntwrk/midnight-js-http-client-proof-provider@3.0.0, ws@8.18.0",
+   "tsc": [
+    {
+     "line": 7,
+     "code": "TS2307",
+     "message": "Cannot find module './providers.js' or its corresponding type declarations."
+    }
+   ],
+   "checker_lines": []
+  },
+  "haiku/t05.ts": {
+   "deps": "@midnight-ntwrk/midnight-js-contracts@3.0.0, @midnight-ntwrk/midnight-js-indexer-public-data-provider@3.0.0, @midnight-ntwrk/midnight-js-network-id@3.0.0, @midnight-ntwrk/compact-runtime@0.9.0, @midnight-ntwrk/compact-js@2.0.0, @midnight-ntwrk/wallet@4.0.0, @midnight-ntwrk/midnight-js-level-private-state-provider@3.0.0, @midnight-ntwrk/midnight-js-node-zk-config-provider@3.0.0, @midnight-ntwrk/midnight-js-http-client-proof-provider@3.0.0, rxjs@7.8.1, ws@8.18.0",
+   "tsc": [
+    {
+     "line": 7,
+     "code": "TS2307",
+     "message": "Cannot find module './providers.js' or its corresponding type declarations."
+    }
+   ],
+   "checker_lines": []
+  },
+  "haiku/t06.tsx": {
+   "deps": "react@18.3.1, react-dom@18.3.1, @midnight-ntwrk/dapp-connector-api@3.0.0, @midnight-ntwrk/midnight-js-contracts@3.0.0, @midnight-ntwrk/midnight-js-indexer-public-data-provider@3.0.0, @midnight-ntwrk/midnight-js-http-client-proof-provider@3.0.0, @midnight-ntwrk/midnight-js-node-zk-config-provider@3.0.0, @midnight-ntwrk/midnight-js-network-id@3.0.0, @midnight-ntwrk/compact-runtime@0.9.0, @midnight-ntwrk/ledger@4.0.0, vite@5.4.10, @vitejs/plugin-react@4.3.2",
+   "tsc": [
+    {
+     "line": 3,
+     "code": "TS2305",
+     "message": "Module '\"@midnight-ntwrk/dapp-connector-api\"' has no exported member 'DAppConnectorAPI'."
+    },
+    {
+     "line": 3,
+     "code": "TS2305",
+     "message": "Module '\"@midnight-ntwrk/dapp-connector-api\"' has no exported member 'DAppConnectorWalletAPI'."
+    },
+    {
+     "line": 26,
+     "code": "TS2322",
+     "message": "Type '() => Promise<any>' is not assignable to type '() => string'."
+    },
+    {
+     "line": 30,
+     "code": "TS2322",
+     "message": "Type '() => Promise<any>' is not assignable to type '() => string'."
+    }
+   ],
+   "checker_lines": [
+    3,
+    12,
+    26,
+    30,
+    69
+   ],
+   "tsc_bundler": [
+    {
+     "line": 3,
+     "code": "TS2305",
+     "message": "Module '\"@midnight-ntwrk/dapp-connector-api\"' has no exported member 'DAppConnectorAPI'."
+    },
+    {
+     "line": 3,
+     "code": "TS2305",
+     "message": "Module '\"@midnight-ntwrk/dapp-connector-api\"' has no exported member 'DAppConnectorWalletAPI'."
+    },
+    {
+     "line": 12,
+     "code": "TS2717",
+     "message": "Subsequent property declarations must have the same type.  Property 'midnight' must be of type '{ [key: string]: InitialAPI; }', but here has type '{ mnLace?: DAppConnectorAPI; }'."
+    },
+    {
+     "line": 26,
+     "code": "TS2322",
+     "message": "Type '() => Promise<any>' is not assignable to type '() => string'."
+    },
+    {
+     "line": 30,
+     "code": "TS2322",
+     "message": "Type '() => Promise<any>' is not assignable to type '() => string'."
+    },
+    {
+     "line": 69,
+     "code": "TS2339",
+     "message": "Property 'enable' does not exist on type 'InitialAPI'."
+    }
+   ]
+  },
+  "haiku/t07.ts": {
+   "deps": "@midnight-ntwrk/wallet@4.0.0, @midnight-ntwrk/ledger@4.0.0, @midnight-ntwrk/zswap@4.0.0, @midnight-ntwrk/midnight-js-network-id@3.0.0, rxjs@7.8.1, ws@8.18.0",
+   "tsc": [
+    {
+     "line": 3,
+     "code": "TS2307",
+     "message": "Cannot find module '@midnight-ntwrk/wallet' or its corresponding type declarations."
+    },
+    {
+     "line": 29,
+     "code": "TS2339",
+     "message": "Property 'syncProgress' does not exist on type 'unknown'."
+    },
+    {
+     "line": 32,
+     "code": "TS2339",
+     "message": "Property 'unshielded' does not exist on type 'unknown'."
+    },
+    {
+     "line": 32,
+     "code": "TS2339",
+     "message": "Property 'unshielded' does not exist on type 'unknown'."
+    },
+    {
+     "line": 36,
+     "code": "TS2339",
+     "message": "Property 'unshielded' does not exist on type 'unknown'."
+    },
+    {
+     "line": 46,
+     "code": "TS2339",
+     "message": "Property 'syncProgress' does not exist on type 'unknown'."
+    },
+    {
+     "line": 47,
+     "code": "TS2339",
+     "message": "Property 'dust' does not exist on type 'unknown'."
+    },
+    {
+     "line": 50,
+     "code": "TS2365",
+     "message": "Operator '>' cannot be applied to types 'unknown' and 'bigint'."
+    }
+   ],
+   "checker_lines": [
+    3,
+    25
+   ]
+  },
+  "haiku/t08.ts": {
+   "deps": "@midnight-ntwrk/wallet@4.0.0, @midnight-ntwrk/wallet-sdk-address-format@1.0.0, @midnight-ntwrk/ledger@4.0.0, @midnight-ntwrk/zswap@4.0.0, @midnight-ntwrk/midnight-js-network-id@3.0.0, rxjs@7.8.1, ws@8.18.0",
+   "tsc": [
+    {
+     "line": 3,
+     "code": "TS2307",
+     "message": "Cannot find module '@midnight-ntwrk/wallet' or its corresponding type declarations."
+    },
+    {
+     "line": 31,
+     "code": "TS2339",
+     "message": "Property 'syncProgress' does not exist on type 'unknown'."
+    },
+    {
+     "line": 32,
+     "code": "TS2339",
+     "message": "Property 'unshielded' does not exist on type 'unknown'."
+    },
+    {
+     "line": 33,
+     "code": "TS2339",
+     "message": "Property 'unshielded' does not exist on type 'unknown'."
+    },
+    {
+     "line": 46,
+     "code": "TS2339",
+     "message": "Property 'unshielded' does not exist on type 'unknown'."
+    },
+    {
+     "line": 56,
+     "code": "TS2339",
+     "message": "Property 'unshielded' does not exist on type 'unknown'."
+    }
+   ],
+   "checker_lines": [
+    3,
+    27
+   ]
+  },
+  "haiku/t09.ts": {
+   "deps": "vitest@2.1.4, typescript@5.6.3, @midnight-ntwrk/compact-runtime@0.9.0, @midnight-ntwrk/ledger@4.0.0",
+   "tsc": [
+    {
+     "line": 32,
+     "code": "TS2339",
+     "message": "Property 'data' does not exist on type 'ChargedState'."
+    },
+    {
+     "line": 41,
+     "code": "TS2339",
+     "message": "Property 'data' does not exist on type 'ChargedState'."
+    }
+   ],
+   "checker_lines": [
+    32,
+    41
+   ]
+  },
+  "haiku/t10.ts": {
+   "deps": "@midnight-ntwrk/midnight-js-network-id@3.0.0, @midnight-ntwrk/midnight-js-types@3.0.0",
+   "tsc": [],
+   "checker_lines": []
+  },
+  "opus/t01.ts": {
+   "deps": "@midnight-ntwrk/wallet-sdk-facade@1.0.0, @midnight-ntwrk/wallet-sdk-hd@3.0.0, @midnight-ntwrk/wallet-sdk-shielded@1.0.0, @midnight-ntwrk/wallet-sdk-unshielded-wallet@1.0.0, @midnight-ntwrk/wallet-sdk-dust-wallet@1.0.0, @midnight-ntwrk/ledger-v7@7.0.0, @midnight-ntwrk/midnight-js-network-id@3.0.0, rxjs@7.8.2, ws@8.18.3",
+   "tsc": [
+    {
+     "line": 10,
+     "code": "TS2307",
+     "message": "Cannot find module '@midnight-ntwrk/ledger-v7' or its corresponding type declarations."
+    },
+    {
+     "line": 18,
+     "code": "TS2305",
+     "message": "Module '\"@midnight-ntwrk/wallet-sdk-unshielded-wallet\"' has no exported member 'InMemoryTransactionHistoryStorage'."
+    },
+    {
+     "line": 96,
+     "code": "TS2673",
+     "message": "Constructor of class 'WalletFacade' is private and only accessible within the class declaration."
+    },
+    {
+     "line": 106,
+     "code": "TS2339",
+     "message": "Property 'isSynced' does not exist on type 'unknown'."
+    },
+    {
+     "line": 108,
+     "code": "TS2339",
+     "message": "Property 'isSynced' does not exist on type 'unknown'."
+    },
+    {
+     "line": 113,
+     "code": "TS2339",
+     "message": "Property 'walletBalance' does not exist on type 'DustWalletState<string>'."
+    }
+   ],
+   "checker_lines": [
+    10,
+    18,
+    84,
+    96,
+    113
+   ]
+  },
+  "opus/t02.ts": {
+   "deps": "@midnight-ntwrk/midnight-js-contracts@3.0.0, @midnight-ntwrk/midnight-js-types@3.0.0, @midnight-ntwrk/midnight-js-network-id@3.0.0, @midnight-ntwrk/midnight-js-indexer-public-data-provider@3.0.0, @midnight-ntwrk/midnight-js-http-client-proof-provider@3.0.0, @midnight-ntwrk/midnight-js-node-zk-config-provider@3.0.0, @midnight-ntwrk/midnight-js-level-private-state-provider@3.0.0, @midnight-ntwrk/compact-js@2.3.0, @midnight-ntwrk/compact-runtime@0.11.0, @midnight-ntwrk/ledger-v7@7.0.0, @midnight-ntwrk/wallet-sdk-facade@1.0.0, @midnight-ntwrk/wallet-sdk-hd@3.0.0, @midnight-ntwrk/wallet-sdk-shielded@1.0.0, @midnight-ntwrk/wallet-sdk-unshielded-wallet@1.0.0, @midnight-ntwrk/wallet-sdk-dust-wallet@1.0.0, rxjs@7.8.2, ws@8.18.3",
+   "tsc": [
+    {
+     "line": 16,
+     "code": "TS2307",
+     "message": "Cannot find module '@midnight-ntwrk/ledger-v7' or its corresponding type declarations."
+    },
+    {
+     "line": 24,
+     "code": "TS2459",
+     "message": "Module '\"@midnight-ntwrk/midnight-js-types\"' declares 'FinalizedTransaction' locally, but it is not exported."
+    },
+    {
+     "line": 25,
+     "code": "TS2305",
+     "message": "Module '\"@midnight-ntwrk/midnight-js-types\"' has no exported member 'ImpureCircuitId'."
+    },
+    {
+     "line": 37,
+     "code": "TS2305",
+     "message": "Module '\"@midnight-ntwrk/wallet-sdk-unshielded-wallet\"' has no exported member 'InMemoryTransactionHistoryStorage'."
+    },
+    {
+     "line": 115,
+     "code": "TS2673",
+     "message": "Constructor of class 'WalletFacade' is private and only accessible within the class declaration."
+    },
+    {
+     "line": 122,
+     "code": "TS2339",
+     "message": "Property 'isSynced' does not exist on type 'unknown'."
+    },
+    {
+     "line": 171,
+     "code": "TS2353",
+     "message": "Object literal may only specify known properties, and 'walletProvider' does not exist in type 'Partial<LevelPrivateStateProviderConfig> & Pick<LevelPrivateStateProviderConfig, \"privateStoragePasswordProvider\" | \"accountId\">'."
+    }
+   ],
+   "checker_lines": [
+    16,
+    24,
+    25,
+    37,
+    112,
+    115,
+    169,
+    171
+   ]
+  },
+  "opus/t03.ts": {
+   "deps": "@midnight-ntwrk/midnight-js-contracts@3.0.0, @midnight-ntwrk/midnight-js-types@3.0.0, @midnight-ntwrk/midnight-js-network-id@3.0.0, @midnight-ntwrk/midnight-js-indexer-public-data-provider@3.0.0, @midnight-ntwrk/midnight-js-http-client-proof-provider@3.0.0, @midnight-ntwrk/midnight-js-node-zk-config-provider@3.0.0, @midnight-ntwrk/midnight-js-level-private-state-provider@3.0.0, @midnight-ntwrk/compact-js@2.3.0, @midnight-ntwrk/compact-runtime@0.11.0, @midnight-ntwrk/ledger-v7@7.0.0, @midnight-ntwrk/wallet-sdk-facade@1.0.0, @midnight-ntwrk/wallet-sdk-hd@3.0.0, @midnight-ntwrk/wallet-sdk-shielded@1.0.0, @midnight-ntwrk/wallet-sdk-unshielded-wallet@1.0.0, @midnight-ntwrk/wallet-sdk-dust-wallet@1.0.0, rxjs@7.8.2, ws@8.18.3",
+   "tsc": [
+    {
+     "line": 12,
+     "code": "TS2307",
+     "message": "Cannot find module '@midnight-ntwrk/ledger-v7' or its corresponding type declarations."
+    },
+    {
+     "line": 21,
+     "code": "TS2459",
+     "message": "Module '\"@midnight-ntwrk/midnight-js-types\"' declares 'FinalizedTransaction' locally, but it is not exported."
+    },
+    {
+     "line": 22,
+     "code": "TS2305",
+     "message": "Module '\"@midnight-ntwrk/midnight-js-types\"' has no exported member 'ImpureCircuitId'."
+    },
+    {
+     "line": 34,
+     "code": "TS2305",
+     "message": "Module '\"@midnight-ntwrk/wallet-sdk-unshielded-wallet\"' has no exported member 'InMemoryTransactionHistoryStorage'."
+    },
+    {
+     "line": 90,
+     "code": "TS2673",
+     "message": "Constructor of class 'WalletFacade' is private and only accessible within the class declaration."
+    },
+    {
+     "line": 98,
+     "code": "TS2339",
+     "message": "Property 'isSynced' does not exist on type 'unknown'."
+    },
+    {
+     "line": 100,
+     "code": "TS2339",
+     "message": "Property 'dust' does not exist on type 'unknown'."
+    },
+    {
+     "line": 106,
+     "code": "TS2339",
+     "message": "Property 'shielded' does not exist on type 'unknown'."
+    },
+    {
+     "line": 107,
+     "code": "TS2339",
+     "message": "Property 'shielded' does not exist on type 'unknown'."
+    },
+    {
+     "line": 124,
+     "code": "TS2353",
+     "message": "Object literal may only specify known properties, and 'walletProvider' does not exist in type 'Partial<LevelPrivateStateProviderConfig> & Pick<LevelPrivateStateProviderConfig, \"privateStoragePasswordProvider\" | \"accountId\">'."
+    }
+   ],
+   "checker_lines": [
+    12,
+    21,
+    22,
+    34,
+    87,
+    90,
+    100,
+    122,
+    124
+   ]
+  },
+  "opus/t04.ts": {
+   "deps": "@midnight-ntwrk/midnight-js-contracts@3.0.0, @midnight-ntwrk/midnight-js-types@3.0.0, @midnight-ntwrk/midnight-js-network-id@3.0.0, @midnight-ntwrk/midnight-js-indexer-public-data-provider@3.0.0, @midnight-ntwrk/midnight-js-http-client-proof-provider@3.0.0, @midnight-ntwrk/midnight-js-node-zk-config-provider@3.0.0, @midnight-ntwrk/midnight-js-level-private-state-provider@3.0.0, @midnight-ntwrk/compact-js@2.3.0, @midnight-ntwrk/compact-runtime@0.11.0, @midnight-ntwrk/ledger-v7@7.0.0, @midnight-ntwrk/wallet-sdk-facade@1.0.0, @midnight-ntwrk/wallet-sdk-hd@3.0.0, @midnight-ntwrk/wallet-sdk-shielded@1.0.0, @midnight-ntwrk/wallet-sdk-unshielded-wallet@1.0.0, @midnight-ntwrk/wallet-sdk-dust-wallet@1.0.0, rxjs@7.8.2, ws@8.18.3",
+   "tsc": [
+    {
+     "line": 11,
+     "code": "TS2307",
+     "message": "Cannot find module '@midnight-ntwrk/ledger-v7' or its corresponding type declarations."
+    },
+    {
+     "line": 20,
+     "code": "TS2724",
+     "message": "'\"@midnight-ntwrk/midnight-js-types\"' has no exported member named 'ContractAddress'. Did you mean 'asContractAddress'?"
+    },
+    {
+     "line": 21,
+     "code": "TS2459",
+     "message": "Module '\"@midnight-ntwrk/midnight-js-types\"' declares 'FinalizedTransaction' locally, but it is not exported."
+    },
+    {
+     "line": 22,
+     "code": "TS2305",
+     "message": "Module '\"@midnight-ntwrk/midnight-js-types\"' has no exported member 'ImpureCircuitId'."
+    },
+    {
+     "line": 34,
+     "code": "TS2305",
+     "message": "Module '\"@midnight-ntwrk/wallet-sdk-unshielded-wallet\"' has no exported member 'InMemoryTransactionHistoryStorage'."
+    },
+    {
+     "line": 98,
+     "code": "TS2673",
+     "message": "Constructor of class 'WalletFacade' is private and only accessible within the class declaration."
+    },
+    {
+     "line": 104,
+     "code": "TS2339",
+     "message": "Property 'isSynced' does not exist on type 'unknown'."
+    },
+    {
+     "line": 108,
+     "code": "TS2339",
+     "message": "Property 'shielded' does not exist on type 'unknown'."
+    },
+    {
+     "line": 109,
+     "code": "TS2339",
+     "message": "Property 'shielded' does not exist on type 'unknown'."
+    },
+    {
+     "line": 126,
+     "code": "TS2353",
+     "message": "Object literal may only specify known properties, and 'walletProvider' does not exist in type 'Partial<LevelPrivateStateProviderConfig> & Pick<LevelPrivateStateProviderConfig, \"privateStoragePasswordProvider\" | \"accountId\">'."
+    }
+   ],
+   "checker_lines": [
+    11,
+    20,
+    21,
+    22,
+    34,
+    95,
+    98,
+    124,
+    126
+   ]
+  },
+  "opus/t05.ts": {
+   "deps": "@midnight-ntwrk/midnight-js-indexer-public-data-provider@3.0.0, @midnight-ntwrk/midnight-js-network-id@3.0.0, @midnight-ntwrk/midnight-js-types@3.0.0, @midnight-ntwrk/compact-runtime@0.11.0, rxjs@7.8.2, ws@8.18.3",
+   "tsc": [
+    {
+     "line": 12,
+     "code": "TS2724",
+     "message": "'\"@midnight-ntwrk/midnight-js-types\"' has no exported member named 'ContractAddress'. Did you mean 'asContractAddress'?"
+    }
+   ],
+   "checker_lines": [
+    12
+   ]
+  },
+  "opus/t06.tsx": {
+   "deps": "@midnight-ntwrk/dapp-connector-api@4.0.0, @midnight-ntwrk/midnight-js-contracts@3.0.0, @midnight-ntwrk/midnight-js-types@3.0.0, @midnight-ntwrk/midnight-js-network-id@3.0.0, @midnight-ntwrk/midnight-js-indexer-public-data-provider@3.0.0, @midnight-ntwrk/midnight-js-fetch-zk-config-provider@3.0.0, @midnight-ntwrk/midnight-js-level-private-state-provider@3.0.0, @midnight-ntwrk/midnight-js-utils@3.0.0, @midnight-ntwrk/wallet-sdk-address-format@3.0.0, @midnight-ntwrk/compact-js@2.3.0, @midnight-ntwrk/compact-runtime@0.11.0, @midnight-ntwrk/ledger-v7@7.0.0, react@18.3.1, react-dom@18.3.1",
+   "tsc": [
+    {
+     "line": 13,
+     "code": "TS2307",
+     "message": "Cannot find module '@midnight-ntwrk/ledger-v7' or its corresponding type declarations."
+    },
+    {
+     "line": 21,
+     "code": "TS2459",
+     "message": "Module '\"@midnight-ntwrk/midnight-js-types\"' declares 'FinalizedTransaction' locally, but it is not exported."
+    },
+    {
+     "line": 22,
+     "code": "TS2305",
+     "message": "Module '\"@midnight-ntwrk/midnight-js-types\"' has no exported member 'ImpureCircuitId'."
+    },
+    {
+     "line": 27,
+     "code": "TS2724",
+     "message": "'\"@midnight-ntwrk/midnight-js-types\"' has no exported member named 'UnprovenTransaction'. Did you mean 'UnboundTransaction'?"
+    },
+    {
+     "line": 99,
+     "code": "TS2315",
+     "message": "Type 'ProofProvider' is not generic."
+    },
+    {
+     "line": 126,
+     "code": "TS2353",
+     "message": "Object literal may only specify known properties, and 'walletProvider' does not exist in type 'Partial<LevelPrivateStateProviderConfig> & Pick<LevelPrivateStateProviderConfig, \"privateStoragePasswordProvider\" | \"accountId\">'."
+    }
+   ],
+   "checker_lines": [
+    13,
+    21,
+    22,
+    27,
+    99,
+    124,
+    126
+   ],
+   "tsc_bundler": [
+    {
+     "line": 13,
+     "code": "TS2307",
+     "message": "Cannot find module '@midnight-ntwrk/ledger-v7' or its corresponding type declarations."
+    },
+    {
+     "line": 21,
+     "code": "TS2459",
+     "message": "Module '\"@midnight-ntwrk/midnight-js-types\"' declares 'FinalizedTransaction' locally, but it is not exported."
+    },
+    {
+     "line": 22,
+     "code": "TS2305",
+     "message": "Module '\"@midnight-ntwrk/midnight-js-types\"' has no exported member 'ImpureCircuitId'."
+    },
+    {
+     "line": 27,
+     "code": "TS2724",
+     "message": "'\"@midnight-ntwrk/midnight-js-types\"' has no exported member named 'UnprovenTransaction'. Did you mean 'UnboundTransaction'?"
+    },
+    {
+     "line": 99,
+     "code": "TS2315",
+     "message": "Type 'ProofProvider' is not generic."
+    },
+    {
+     "line": 126,
+     "code": "TS2353",
+     "message": "Object literal may only specify known properties, and 'walletProvider' does not exist in type 'Partial<LevelPrivateStateProviderConfig> & Pick<LevelPrivateStateProviderConfig, \"privateStoragePasswordProvider\" | \"accountId\">'."
+    }
+   ]
+  },
+  "opus/t07.ts": {
+   "deps": "@midnight-ntwrk/wallet-sdk-facade@1.0.0, @midnight-ntwrk/wallet-sdk-hd@3.0.0, @midnight-ntwrk/wallet-sdk-shielded@1.0.0, @midnight-ntwrk/wallet-sdk-unshielded-wallet@1.0.0, @midnight-ntwrk/wallet-sdk-dust-wallet@1.0.0, @midnight-ntwrk/ledger-v7@7.0.0, @midnight-ntwrk/midnight-js-network-id@3.0.0, rxjs@7.8.2, ws@8.18.3",
+   "tsc": [
+    {
+     "line": 10,
+     "code": "TS2307",
+     "message": "Cannot find module '@midnight-ntwrk/ledger-v7' or its corresponding type declarations."
+    },
+    {
+     "line": 18,
+     "code": "TS2305",
+     "message": "Module '\"@midnight-ntwrk/wallet-sdk-unshielded-wallet\"' has no exported member 'InMemoryTransactionHistoryStorage'."
+    },
+    {
+     "line": 62,
+     "code": "TS2673",
+     "message": "Constructor of class 'WalletFacade' is private and only accessible within the class declaration."
+    },
+    {
+     "line": 70,
+     "code": "TS2339",
+     "message": "Property 'isSynced' does not exist on type 'unknown'."
+    },
+    {
+     "line": 72,
+     "code": "TS2339",
+     "message": "Property 'unshielded' does not exist on type 'unknown'."
+    },
+    {
+     "line": 81,
+     "code": "TS2339",
+     "message": "Property 'unshielded' does not exist on type 'unknown'."
+    },
+    {
+     "line": 102,
+     "code": "TS2339",
+     "message": "Property 'isSynced' does not exist on type 'unknown'."
+    },
+    {
+     "line": 103,
+     "code": "TS2339",
+     "message": "Property 'dust' does not exist on type 'unknown'."
+    },
+    {
+     "line": 105,
+     "code": "TS2365",
+     "message": "Operator '>' cannot be applied to types 'unknown' and 'bigint'."
+    }
+   ],
+   "checker_lines": [
+    10,
+    18,
+    59,
+    62,
+    103
+   ]
+  },
+  "opus/t08.ts": {
+   "deps": "@midnight-ntwrk/wallet-sdk-facade@1.0.0, @midnight-ntwrk/wallet-sdk-hd@3.0.0, @midnight-ntwrk/wallet-sdk-shielded@1.0.0, @midnight-ntwrk/wallet-sdk-unshielded-wallet@1.0.0, @midnight-ntwrk/wallet-sdk-dust-wallet@1.0.0, @midnight-ntwrk/wallet-sdk-address-format@3.0.0, @midnight-ntwrk/ledger-v6@6.1.0, @midnight-ntwrk/midnight-js-network-id@3.0.0, rxjs@7.8.1",
+   "tsc": [
+    {
+     "line": 8,
+     "code": "TS2307",
+     "message": "Cannot find module '@midnight-ntwrk/ledger-v6' or its corresponding type declarations."
+    },
+    {
+     "line": 18,
+     "code": "TS2305",
+     "message": "Module '\"@midnight-ntwrk/wallet-sdk-unshielded-wallet\"' has no exported member 'InMemoryTransactionHistoryStorage'."
+    },
+    {
+     "line": 71,
+     "code": "TS2345",
+     "message": "Argument of type '{ networkId: string; indexerClientConnection: { indexerHttpUrl: string; indexerWsUrl: string; }; provingServerUrl: URL; relayURL: URL; }' is not assignable to parameter of type 'DefaultV1Configuration'."
+    },
+    {
+     "line": 79,
+     "code": "TS2345",
+     "message": "Argument of type '{ costParameters: { additionalFeeOverhead: bigint; feeBlocksMargin: number; }; networkId: string; indexerClientConnection: { indexerHttpUrl: string; indexerWsUrl: string; }; provingServerUrl: URL; relayURL: URL; }' is not assignable to parameter of type 'DefaultV1Configuration'."
+    },
+    {
+     "line": 87,
+     "code": "TS2673",
+     "message": "Constructor of class 'WalletFacade' is private and only accessible within the class declaration."
+    },
+    {
+     "line": 116,
+     "code": "TS2339",
+     "message": "Property 'isSynced' does not exist on type 'unknown'."
+    },
+    {
+     "line": 121,
+     "code": "TS2339",
+     "message": "Property 'unshielded' does not exist on type 'unknown'."
+    }
+   ],
+   "checker_lines": [
+    8,
+    18,
+    76,
+    87
+   ]
+  },
+  "opus/t09.ts": {
+   "deps": "@midnight-ntwrk/compact-runtime@0.9.0, vitest@3.2.4",
+   "tsc": [],
+   "checker_lines": []
+  },
+  "opus/t10.ts": {
+   "deps": "@midnight-ntwrk/midnight-js-network-id@3.0.0, @midnight-ntwrk/midnight-js-indexer-public-data-provider@3.0.0, @midnight-ntwrk/midnight-js-http-client-proof-provider@3.0.0, @midnight-ntwrk/midnight-js-node-zk-config-provider@3.0.0, @midnight-ntwrk/midnight-js-level-private-state-provider@3.0.0, @midnight-ntwrk/midnight-js-types@3.0.0",
+   "tsc": [
+    {
+     "line": 39,
+     "code": "TS2315",
+     "message": "Type 'ProofProvider' is not generic."
+    },
+    {
+     "line": 50,
+     "code": "TS2345",
+     "message": "Argument of type '{ privateStateStoreName: string; }' is not assignable to parameter of type 'Partial<LevelPrivateStateProviderConfig> & Pick<LevelPrivateStateProviderConfig, \"privateStoragePasswordProvider\" | \"accountId\">'."
+    }
+   ],
+   "checker_lines": [
+    39,
+    50
+   ]
+  },
+  "sonnet/t01.ts": {
+   "deps": "@midnight-ntwrk/wallet-sdk-facade@1.0.0, @midnight-ntwrk/wallet-sdk-hd@1.0.0, @midnight-ntwrk/wallet-sdk-shielded@1.0.0, @midnight-ntwrk/wallet-sdk-unshielded-wallet@1.0.0, @midnight-ntwrk/wallet-sdk-dust-wallet@1.0.0, @midnight-ntwrk/ledger-v7@7.0.0, @midnight-ntwrk/midnight-js-network-id@3.0.0, rxjs@7.8.1, ws@8.18.0, tsx@4.19.0, typescript@5.6.3",
+   "tsc": [
+    {
+     "line": 5,
+     "code": "TS2307",
+     "message": "Cannot find module '@midnight-ntwrk/ledger-v7' or its corresponding type declarations."
+    },
+    {
+     "line": 13,
+     "code": "TS2305",
+     "message": "Module '\"@midnight-ntwrk/wallet-sdk-unshielded-wallet\"' has no exported member 'InMemoryTransactionHistoryStorage'."
+    },
+    {
+     "line": 64,
+     "code": "TS2339",
+     "message": "Property 'walletBalance' does not exist on type 'DustWalletState<string>'."
+    }
+   ],
+   "checker_lines": [
+    5,
+    13,
+    48,
+    64
+   ]
+  },
+  "sonnet/t02.ts": {
+   "deps": "@midnight-ntwrk/midnight-js-contracts@3.0.0, @midnight-ntwrk/midnight-js-types@3.0.0, @midnight-ntwrk/midnight-js-http-client-proof-provider@3.0.0, @midnight-ntwrk/midnight-js-indexer-public-data-provider@3.0.0, @midnight-ntwrk/midnight-js-level-private-state-provider@3.0.0, @midnight-ntwrk/midnight-js-node-zk-config-provider@3.0.0, @midnight-ntwrk/midnight-js-network-id@3.0.0, @midnight-ntwrk/wallet-sdk-facade@1.0.0, @midnight-ntwrk/ledger-v7@7.0.0, @midnight-ntwrk/compact-runtime@0.9.0",
+   "tsc": [
+    {
+     "line": 11,
+     "code": "TS2307",
+     "message": "Cannot find module '@midnight-ntwrk/ledger-v7' or its corresponding type declarations."
+    },
+    {
+     "line": 55,
+     "code": "TS2353",
+     "message": "Object literal may only specify known properties, and 'walletProvider' does not exist in type 'Partial<LevelPrivateStateProviderConfig> & Pick<LevelPrivateStateProviderConfig, \"privateStoragePasswordProvider\" | \"accountId\">'."
+    }
+   ],
+   "checker_lines": [
+    11,
+    53,
+    55
+   ]
+  },
+  "sonnet/t03.ts": {
+   "deps": "@midnight-ntwrk/midnight-js-contracts@3.0.0, @midnight-ntwrk/compact-js@2.0.0, @midnight-ntwrk/compact-runtime@0.9.0, @midnight-ntwrk/midnight-js-types@3.0.0, @midnight-ntwrk/midnight-js-node-zk-config-provider@3.0.0, @midnight-ntwrk/midnight-js-network-id@3.0.0, tsx@4.19.0, typescript@5.6.3",
+   "tsc": [
+    {
+     "line": 5,
+     "code": "TS2307",
+     "message": "Cannot find module './contract/out/contract/index.cjs' or its corresponding type declarations."
+    },
+    {
+     "line": 6,
+     "code": "TS2835",
+     "message": "Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean './t02.js'?"
+    },
+    {
+     "line": 7,
+     "code": "TS2834",
+     "message": "Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Consider adding an extension to the import path."
+    },
+    {
+     "line": 18,
+     "code": "TS2769",
+     "message": "No overload matches this call."
+    }
+   ],
+   "checker_lines": [
+    5
+   ]
+  },
+  "sonnet/t04.ts": {
+   "deps": "@midnight-ntwrk/midnight-js-contracts@3.0.0, @midnight-ntwrk/compact-js@2.0.0, @midnight-ntwrk/compact-runtime@0.9.0, @midnight-ntwrk/midnight-js-types@3.0.0, tsx@4.19.0, typescript@5.6.3",
+   "tsc": [
+    {
+     "line": 5,
+     "code": "TS2307",
+     "message": "Cannot find module './contract/out/contract/index.cjs' or its corresponding type declarations."
+    },
+    {
+     "line": 6,
+     "code": "TS2835",
+     "message": "Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Did you mean './t02.js'?"
+    },
+    {
+     "line": 7,
+     "code": "TS2834",
+     "message": "Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Consider adding an extension to the import path."
+    },
+    {
+     "line": 22,
+     "code": "TS2769",
+     "message": "No overload matches this call."
+    }
+   ],
+   "checker_lines": [
+    5
+   ]
+  },
+  "sonnet/t05.ts": {
+   "deps": "@midnight-ntwrk/midnight-js-indexer-public-data-provider@3.0.0, @midnight-ntwrk/midnight-js-network-id@3.0.0, @midnight-ntwrk/compact-runtime@0.9.0, rxjs@7.8.1, ws@8.18.0, tsx@4.19.0, typescript@5.6.3",
+   "tsc": [
+    {
+     "line": 6,
+     "code": "TS2307",
+     "message": "Cannot find module './contract/out/contract/index.cjs' or its corresponding type declarations."
+    }
+   ],
+   "checker_lines": [
+    6
+   ]
+  },
+  "sonnet/t06.tsx": {
+   "deps": "@midnight-ntwrk/dapp-connector-api@4.0.0, @midnight-ntwrk/midnight-js-contracts@3.0.0, @midnight-ntwrk/midnight-js-types@3.0.0, @midnight-ntwrk/midnight-js-http-client-proof-provider@3.0.0, @midnight-ntwrk/midnight-js-indexer-public-data-provider@3.0.0, @midnight-ntwrk/midnight-js-level-private-state-provider@3.0.0, @midnight-ntwrk/midnight-js-fetch-zk-config-provider@3.0.0, @midnight-ntwrk/midnight-js-network-id@3.0.0, @midnight-ntwrk/ledger-v7@7.0.0, react@18.3.1, react-dom@18.3.1, vite@5.4.10, typescript@5.6.3",
+   "tsc": [
+    {
+     "line": 11,
+     "code": "TS2307",
+     "message": "Cannot find module '@midnight-ntwrk/ledger-v7' or its corresponding type declarations."
+    },
+    {
+     "line": 48,
+     "code": "TS2345",
+     "message": "Argument of type '{ privateStateStoreName: string; }' is not assignable to parameter of type 'Partial<LevelPrivateStateProviderConfig> & Pick<LevelPrivateStateProviderConfig, \"privateStoragePasswordProvider\" | \"accountId\">'."
+    }
+   ],
+   "checker_lines": [
+    11,
+    15,
+    48
+   ],
+   "tsc_bundler": [
+    {
+     "line": 11,
+     "code": "TS2307",
+     "message": "Cannot find module '@midnight-ntwrk/ledger-v7' or its corresponding type declarations."
+    },
+    {
+     "line": 15,
+     "code": "TS2717",
+     "message": "Subsequent property declarations must have the same type.  Property 'midnight' must be of type '{ [key: string]: InitialAPI; }', but here has type '{ [key: string]: InitialAPI; mnLace?: InitialAPI; }'."
+    },
+    {
+     "line": 48,
+     "code": "TS2345",
+     "message": "Argument of type '{ privateStateStoreName: string; }' is not assignable to parameter of type 'Partial<LevelPrivateStateProviderConfig> & Pick<LevelPrivateStateProviderConfig, \"privateStoragePasswordProvider\" | \"accountId\">'."
+    }
+   ]
+  },
+  "sonnet/t07.ts": {
+   "deps": "@midnight-ntwrk/wallet-sdk-facade@1.0.0, @midnight-ntwrk/wallet-sdk-unshielded-wallet@1.0.0, @midnight-ntwrk/ledger-v7@7.0.0, rxjs@7.8.1, tsx@4.19.0, typescript@5.6.3",
+   "tsc": [
+    {
+     "line": 3,
+     "code": "TS2834",
+     "message": "Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Consider adding an extension to the import path."
+    },
+    {
+     "line": 7,
+     "code": "TS2339",
+     "message": "Property 'isSynced' does not exist on type 'unknown'."
+    },
+    {
+     "line": 9,
+     "code": "TS2339",
+     "message": "Property 'dust' does not exist on type 'unknown'."
+    },
+    {
+     "line": 13,
+     "code": "TS2339",
+     "message": "Property 'unshielded' does not exist on type 'unknown'."
+    },
+    {
+     "line": 14,
+     "code": "TS2339",
+     "message": "Property 'dust' does not exist on type 'unknown'."
+    },
+    {
+     "line": 33,
+     "code": "TS2339",
+     "message": "Property 'isSynced' does not exist on type 'unknown'."
+    },
+    {
+     "line": 34,
+     "code": "TS2339",
+     "message": "Property 'dust' does not exist on type 'unknown'."
+    },
+    {
+     "line": 37,
+     "code": "TS2339",
+     "message": "Property 'dust' does not exist on type 'unknown'."
+    }
+   ],
+   "checker_lines": [
+    9,
+    34,
+    37
+   ]
+  },
+  "sonnet/t08.ts": {
+   "deps": "@midnight-ntwrk/wallet-sdk-facade@1.0.0, @midnight-ntwrk/wallet-sdk-address-format@1.0.0, @midnight-ntwrk/ledger-v7@7.0.0, rxjs@7.8.1, tsx@4.19.0, typescript@5.6.3",
+   "tsc": [
+    {
+     "line": 3,
+     "code": "TS2307",
+     "message": "Cannot find module '@midnight-ntwrk/ledger-v7' or its corresponding type declarations."
+    },
+    {
+     "line": 4,
+     "code": "TS2834",
+     "message": "Relative import paths need explicit file extensions in ECMAScript imports when '--moduleResolution' is 'node16' or 'nodenext'. Consider adding an extension to the import path."
+    },
+    {
+     "line": 10,
+     "code": "TS2339",
+     "message": "Property 'isSynced' does not exist on type 'unknown'."
+    }
+   ],
+   "checker_lines": [
+    3
+   ]
+  },
+  "sonnet/t09.ts": {
+   "deps": "vitest@2.1.8, @midnight-ntwrk/compact-runtime@0.9.0, typescript@5.6.3",
+   "tsc": [
+    {
+     "line": 5,
+     "code": "TS2724",
+     "message": "'\"@midnight-ntwrk/compact-runtime\"' has no exported member named 'constructorContext'. Did you mean 'ConstructorContext'?"
+    },
+    {
+     "line": 8,
+     "code": "TS2724",
+     "message": "'\"@midnight-ntwrk/compact-runtime\"' has no exported member named 'sampleCoinPublicKey'. Did you mean 'CoinPublicKey'?"
+    },
+    {
+     "line": 10,
+     "code": "TS2307",
+     "message": "Cannot find module '../out/contract/index.cjs' or its corresponding type declarations."
+    }
+   ],
+   "checker_lines": [
+    5,
+    8,
+    10
+   ]
+  },
+  "sonnet/t10.ts": {
+   "deps": "@midnight-ntwrk/midnight-js-network-id@3.0.0, typescript@5.6.3",
+   "tsc": [],
+   "checker_lines": []
+  }
+ }
+}
