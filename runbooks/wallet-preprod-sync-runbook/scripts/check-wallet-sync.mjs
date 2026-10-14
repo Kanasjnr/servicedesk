@@ -286,7 +286,14 @@ for (const file of opts.states) {
   } else {
     const behind = Number(tip - offset);
     const eta = kind === 'dust' && opts.network === 'preprod' && !opts.http ? `, about ${minutes(behind, APPLY_RATE.high)}-${minutes(behind, APPLY_RATE.low)} min to catch up` : '';
-    add(label, `offset ${fmt(offset)}, ${fmt(behind)} events behind, ${size}`, 'OK', `resumes from here${eta}${sizeNote}`);
+    // Within range is only plausible: state saved against another indexer whose ids differ by a little (the official
+    // preprod indexer and Blockfrost are 22 apart) passes too, and stalls on restore all the same.
+    add(
+      label,
+      `offset ${fmt(offset)}, ${fmt(behind)} events behind, ${size}`,
+      'OK',
+      `plausible: within this indexer's range, but a state saved against another indexer can be too (runbook, Remediation 2)${eta}${sizeNote}`,
+    );
   }
 }
 
@@ -296,11 +303,14 @@ const line = (r) => [r.check.padEnd(widths[0]), r.found.padEnd(widths[1]), r.sta
 console.log(line({ check: 'check', found: 'found', status: 'status', note: 'note' }));
 for (const r of rows) console.log(line(r));
 const failed = rows.some((r) => r.status === 'FAIL');
+const warned = rows.some((r) => r.status === 'WARN');
 console.log(
   `\nRESULT: ${
     failed
       ? 'at least one FAIL above: fix it before waiting on a sync.'
-      : 'nothing here stops a sync. If it still looks stuck, log its progress with scripts/watch-sync.ts (runbook, Diagnose step 2).'
+      : warned
+        ? 'nothing here stops a sync, but the WARN rows above will slow it or cost a full replay (runbook, Diagnose step 1). If it still looks stuck, log its progress with scripts/watch-sync.ts (Diagnose step 2).'
+        : 'nothing here stops a sync. If it still looks stuck, log its progress with scripts/watch-sync.ts (runbook, Diagnose step 2).'
   }`,
 );
 process.exit(failed ? 2 : 0);

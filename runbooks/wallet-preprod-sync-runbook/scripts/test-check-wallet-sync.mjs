@@ -171,8 +171,8 @@ const CASES = [
       /^Shielded events +newest id 60,000 +INFO/m,
       /^DUST delivery +[\d,]+ events\/s over 1 s +INFO +streaming all 50,000 events at this rate takes about \d+ min$/m,
       /^Fresh-wallet sync +50,000 DUST events to replay +INFO/m,
-      /^State dust \(dust-behind\.json\) +offset 40,000, 10,000 events behind, 380 KB +OK +resumes from here; restoring it rebuilds/m,
-      /^State shielded \(shielded-behind\.json\) +offset 59,000, 1,000 events behind, 4 KB +OK +resumes from here$/m,
+      /^State dust \(dust-behind\.json\) +offset 40,000, 10,000 events behind, 380 KB +OK +plausible: within this indexer's range, but a state saved against another indexer can be too \(runbook, Remediation 2\); restoring it rebuilds/m,
+      /^State shielded \(shielded-behind\.json\) +offset 59,000, 1,000 events behind, 4 KB +OK +plausible: within this indexer's range, but a state saved against another indexer can be too \(runbook, Remediation 2\)$/m,
       /^State unshielded \(unshielded\.json\) +appliedId 7, 1 KB +INFO/m,
       /^RESULT: nothing here stops a sync/m,
     ],
@@ -210,7 +210,10 @@ const CASES = [
     silent: true,
     args: [...local, '--sample', '1'],
     code: 0,
-    expect: [/^DUST delivery +0 events\/s over 1 s +WARN +no event arrived in 1 s/m],
+    expect: [
+      /^DUST delivery +0 events\/s over 1 s +WARN +no event arrived in 1 s/m,
+      /^RESULT: nothing here stops a sync, but the WARN rows above will slow it or cost a full replay/m,
+    ],
   },
   {
     name: 'project id for another network (403)',
