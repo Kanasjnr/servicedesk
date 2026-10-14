@@ -20,7 +20,7 @@ Sources, pinned:_
   `standard-library-aliases.ss`_
 - _`@midnight-ntwrk/compact-runtime` 0.16.0 (the runtime 0.31.1 contracts target)_
 - _midnight-expert `main` at `db9afac4d8472f3c9c698f4bf376f48373ae1714` (the catalogue of known
-  mistakes that was reproduced)_
+  mistakes that was reproduced, before midnight-expert#278 corrected it)_
 - _servicedesk, midnight-expert, Compact and midnight-docs issues cited below_
 
 _Compilers move: re-check messages and names before asserting anything._
@@ -84,10 +84,12 @@ leaves a recognisable error:
 3. **Newer Compact.** Agents read the latest docs and compiler, but the networks need 0.31.1 (language
    0.23.0). Code using 0.34.0 or 0.35.0 features fails on 0.31.1. The reverse breaks too: some 0.31.1
    code fails on 0.34.0 and 0.35.0, so upgrading the compiler isn't a fix.
-4. **Wrong reference material.** midnight-expert's Compact references were the main guardrail in
-   Claude Code, but they disagree with each other in places, and some of their error texts and fixes
-   are wrong when tested (Upstream follow-ups). An agent following them can be told the wrong fix with
-   confidence.
+4. **Wrong reference material.** An agent trusts the references it's given, and a reference can quote
+   an error the compiler doesn't print or a fix that doesn't work. midnight-expert's Compact
+   references did both until
+   [midnight-expert#278](https://github.com/midnightntwrk/midnight-expert/pull/278) corrected them
+   on 2026-10-09 (Upstream follow-ups). Where a reference and the compiler disagree, go by the
+   compiler.
 
 The compiler's one-error-per-run behaviour makes this worse. It never lists every mistake at once, and
 a bare `unbound identifier X` doesn't say whether X is invented, renamed, newer, or just not imported.
@@ -144,7 +146,8 @@ a bare `unbound identifier X` doesn't say whether X is invented, renamed, newer,
      rest (mostly disclosure and type errors) need the compiler. On 509 public contracts that compile
      with 0.31.1 (midnight-expert, the Compact repo's examples, OpenZeppelin, midnight-examples and
      others) it reports no errors. A name it doesn't know, in a file that includes or imports other
-     code, is only a warning, as is a problem inside a generic module that's never used.
+     code, is only a warning, as is a problem inside a generic module that's never used. It also
+     warns on the code under "Compiles, but still wrong" (Remediation), which the compiler accepts.
    - **`--compile`:** compiles with 0.31.1 and explains the error. Disclosure errors are listed
      one by one: the private value, where it becomes public (the last step of the compiler's path,
      which is where `disclose()` goes), and the path. If 0.31.1 fails and 0.35.0 is installed, it
@@ -204,6 +207,7 @@ question, it was also run with the Compact runtime (the NOTES list which, and wh
    The identity pattern, run with the right secret (accepted) and a wrong one (rejected):
 
    ```compact
+   import CompactStandardLibrary;
    witness secretKey(): Bytes<32>;
    export ledger owner: Bytes<32>;
    circuit publicKey(sk: Bytes<32>): Bytes<32> {
@@ -222,6 +226,7 @@ question, it was also run with the Compact runtime (the NOTES list which, and wh
    rejected T + 1 and T − 600:
 
    ```compact
+   import CompactStandardLibrary;
    export ledger fundedAt: Uint<64>;
    export circuit deposit(now: Uint<64>): [] {
      const t = disclose(now);
@@ -280,8 +285,8 @@ question, it was also run with the Compact runtime (the NOTES list which, and wh
      }
      ```
 
-     A check of only `q * b <= a` (as midnight-expert suggests) accepts a quotient that is too small,
-     and any quotient when `b` is 0.
+     A check of only `q * b <= a` (midnight-expert's check before its 2026-10-09 fix) accepts a
+     quotient that is too small, and any quotient when `b` is 0.
    - **Flags:** use `Vector<N, Boolean>` and `&&`, `||`, `!`, `!=`. There's no cast between a Uint
      and a `Vector<N, Boolean>`, so convert to and from bits in JavaScript.
    - **`<<`:** multiply: `(x * 8) as Uint<16>` for `x << 3` on a `Uint<8>`. That matches only while the
@@ -342,11 +347,13 @@ question, it was also run with the Compact runtime (the NOTES list which, and wh
      directory. `compact compile --trace-search` shows every place it looked.
    - **Modules:** a module file holds exactly one module, named like the file.
 10. **Stop the agent from repeating it.** Point it at this runbook and have it run the checker before
-    every compile. Pin the compiler (`compact compile +0.31.1`) and the pragma (`>= 0.22 && <= 0.23`).
-    Treat older midnight-expert error texts with care until its references are corrected.
+    every compile, and read its warnings as well as its errors: the warnings are the patterns below,
+    which compile. Pin the compiler (`compact compile +0.31.1`) and the pragma (`>= 0.22 && <= 0.23`).
+    If a reference quotes an error the compiler doesn't print, go by the compiler.
 
 **Compiles, but still wrong.** These came up while reproducing the catalogue. The compiler accepts
-them, and each was checked with the Compact runtime:
+them, and each was checked with the Compact runtime. The checker warns on each one, without changing
+its exit code:
 
 - **`ownPublicKey()` as authorization:** `assert(ownPublicKey() == owner)` is not authentication. The
   caller supplies `ownPublicKey()`, and the owner's key is public ledger state, so anyone passes by
@@ -364,23 +371,17 @@ them, and each was checked with the Compact runtime:
   was the same bug in its own examples). The binding doesn't stop a member using it twice; that
   needs a nullifier.
 - **Minting to yourself:** `mintUnshieldedToken` to the contract's own address already records the
-  receipt. Adding `receiveUnshielded` (as midnight-expert advises) counts it twice. Whether the ledger
-  rejects that transaction wasn't run on a network (Upstream follow-ups).
+  receipt. Adding `receiveUnshielded` (midnight-expert's advice before its 2026-10-09 fix) counts it
+  twice. Whether the ledger rejects that transaction wasn't run on a network (Upstream follow-ups).
 
 ## Upstream follow-ups
 
-- midnight-expert ([#276](https://github.com/midnightntwrk/midnight-expert/issues/276)): error texts that don't match the compiler, contradictions between its own
-  files, and fixes that are wrong when run. Specifically:
-  - It documents `implicit disclosure of witness value`, but the compiler prints
-    `potential witness-value disclosure must be declared but is not`.
-  - Its claimed messages for `Void`, `hash`, `function`, const reassignment and recursion don't match
-    what the compiler prints.
-  - It says `else if`, `map`, `slice` and `List.length()` don't exist, but they do.
-  - Its division check and its `receiveUnshielded`-after-mint advice are wrong when run. Its factorial
-    rewrite (which reassigns a `const`) and its sealed-field fix don't compile.
-  - Its `get_public_key()` "fix" doesn't exist either.
-
-  The full list, with cases, is in the NOTES.
+- midnight-expert ([#276](https://github.com/midnightntwrk/midnight-expert/issues/276)): fixed by
+  [midnight-expert#278](https://github.com/midnightntwrk/midnight-expert/pull/278) on 2026-10-09.
+  It corrected the error texts, the division check, the self-mint, the recursion and sealed-field
+  fixes, and the valid code it called mistakes. One file it didn't touch,
+  `plugins/compact-core/commands/debug-contract.md`, still lists `map()` and `slice()` as invented
+  and says a `Uint` needs a `Field` step before `Bytes`; all three compile on 0.31.1 (to file).
 - Compact compiler (to file):
   - `a & b` reports `unexpected character ' '`.
   - Shift operators report an internal grammar name, `expression4`.

@@ -10,7 +10,8 @@ own contracts; it never edits them.
   in midnightntwrk/midnight-expert at `db9afac4d8472f3c9c698f4bf376f48373ae1714`
   (`compact-structure/references/common-mistakes.md`, `compact-review/references/compilation-review.md`,
   `compact-language-ref/references/troubleshooting.md`, `commands/debug-contract.md` and others),
-  each with the wrong code, the fix and the error text the references claim.
+  each with the wrong code, the fix and the error text the references claim. midnight-expert#278
+  corrected most of them on 2026-10-09; what these notes say about the catalogue is about `db9afac`.
 - **Real-world reports.** These are 27 more patterns from servicedesk, midnight-expert, Compact and
   midnight-docs issues and the Technical Moderator reports (for example compact#19, midnight-expert#229,
   servicedesk#180, #202, #170, #86, compact#296, #833, #834, midnight-expert#256).
@@ -257,6 +258,50 @@ What was fixed:
   argument counts for any ledger type, ambiguous overloads, include and type cycles, out-of-range
   literals, lengths and Uint ranges, keywords in the wrong place, and the older `Unsigned Integer[N]`.
 
+**Second review (2026-10-14).** The reviewer re-ran the static test on Node 20, 22, 24 and 25 and the
+full `--compile` replay, and found five things. All are fixed:
+
+- **The README:** the error-string lookup section had landed inside the index table, so the SDK
+  runbook's row rendered at the bottom of the lookup table. It's back in the index.
+- **Code that compiles but is still wrong got no warning,** though the runbook tells agents to run
+  the checker before every compile. The five patterns under "Compiles, but still wrong" now each get
+  one: `ownPublicKey()` compared with a key, `unshieldedBalance()` in a comparison, an `if` on
+  `checkRoot` with no `else`, a Merkle path checked against the root with no `.leaf` binding, and
+  `receiveUnshielded` of a token just minted to the contract itself. A use through a `const` counts.
+  They're warnings, so the exit code doesn't change.
+- **midnight-expert's references** were corrected by midnight-expert#278 on 2026-10-09, the day after
+  the runbook was compiled. The runbook now says so, and goes by the compiler where they differ.
+- **The identity and time-window samples** had no `import CompactStandardLibrary;`, so pasted alone
+  they failed with `unbound identifier persistentHash` and `unbound identifier blockTimeGte`. All
+  three samples in the runbook now compile as printed on 0.31.1 and 0.35.0.
+- **On Node 18 the test runner** printed 25 "WRONG EXPLANATION" lines before saying Node 20 was
+  needed. It checks the version first now.
+
+**The new warnings on real contracts.** They were run on 861 `.compact` files from seven of the repos
+above (LFDT-Minokawa/compact at `compactc-v0.31.1`, OpenZeppelin compact-contracts at `v0.3.0-rc.2`,
+compact-end-2-end, midnight-expert at `50195c9`, midnight-examples, example-bboard and
+example-counter; the others couldn't be cloned that day). The first version of the rules gave 13
+warnings, and 4 of them were wrong:
+
+- midnight-examples' silent auction receives the NIGHT deposit in the same circuit as a self-mint. The
+  rule now needs the received color to be the mint's result.
+- OpenZeppelin's `ShieldedAccessControl._validateRole` branches on `checkRoot` on purpose and returns
+  the result. A `const` that's used outside `if` conditions no longer counts, and neither does an `if`
+  with an `else`.
+- The Compact repo's `election.compact` binds its path through `path.value.leaf` (two warnings). The
+  binding check now follows the chain.
+
+Of the 9 left, one is the pattern itself: `ownPublicKey()` compared with a stored key in the Compact
+repo's `micro-dao.compact` test contract. The other 8 are in regression tests of `checkRoot` and
+`ownPublicKey()`, where there's no caller to bind. There are none on OpenZeppelin, midnight-examples,
+midnight-expert or the example repos, and every earlier finding on the 861 files is unchanged.
+
+**Speed.** The scan for circuit bodies was quadratic on a file of headers with no body: 1.2 MB of
+`circuit a` took 258 s, and takes 1 s now. It's shared by the `const` check and the new rules, and
+finds the same 4,168 bodies as before in the 1,274 corpus and real files. The new rules match brackets
+in one pass, so 440 KB of unclosed `if (` still takes 0.3 s. A 1.5 MB file of `constructor(` with no
+`)` still takes minutes, in the older constructor-parameter scan; real code doesn't look like that.
+
 ## What the checker does
 
 - **Static scan.** It blanks comments and strings (keeping positions), then applies rules taken from
@@ -281,6 +326,9 @@ What was fixed:
   - a missing standard-library import
   - assignment to a ledger type, or to a `const` declared earlier in the same circuit
   - `return` inside `for`
+  - as warnings, code that compiles but is still wrong: `ownPublicKey()` compared with a key,
+    `unshieldedBalance()` in a comparison, an `if` on `checkRoot` with no `else`, a Merkle path not
+    bound with `.leaf`, and `receiveUnshielded` of a token minted to the contract itself
 - **`--compile`.** It compiles each contract with 0.31.1 into a temporary directory. Each compile is
   stopped after `--timeout` seconds (300 by default). It explains the first error using the source
   line it points at, or lists every disclosure error with the point where the value becomes public.
@@ -295,6 +343,7 @@ What was fixed:
 | Run | Result |
 |---|---|
 | Static scan over 413 contracts | 143 of the 210 rejected wrong contracts flagged; the other 67 (mostly disclosure and type errors) are left to `--compile`. No errors on the 173 corrected contracts |
+| Contracts that compile but are wrong | 5 of 5 get their warning; no other corrected contract gets one |
 | Look-alike messages through `--explain` | 25 of 25 get the expected fix |
 | `--compile` (826 compiles, both compilers) | Every first error and exit code matches the recorded one, and every message has an explanation |
 
@@ -310,7 +359,11 @@ Also checked by hand:
 - the runbook's example (`vault.compact` with `Map.get` and `while`), and `--compile` on it
 - a missing path, a directory, broken and looping links
 - a hanging file with `--timeout 20`: stopped at 20 s, no compiler process left running
-- Node 18 (refused)
+- Node 18 (refused, by the checker and the test runner)
+- the new warnings on 16 small contracts that compile on 0.31.1: each pattern directly and through a
+  `const`, and the look-alikes that are fine (an `else`, a returned or asserted result,
+  `ownPublicKey()` stored or returned, a mint to someone else, a comment)
+- three changes to the rules (one dropped, one too broad, one reversed): each fails the test run
 
 ## Not reproduced
 
