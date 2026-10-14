@@ -5,7 +5,9 @@
  *
  * Static (default): writes every case's contracts into a temporary directory and runs the static
  * scan on each. A `right*` file with an error-level finding is a false positive; a `wrong*` file that
- * the compiler rejects and the scan doesn't flag is left to --compile (reported, not a failure).
+ * the compiler rejects and the scan doesn't flag is left to --compile (reported, not a failure). The
+ * contracts that compile but are still wrong (EXPECT_WARNING) must each get their warning, and no other
+ * `right*` file may get one.
  *
  * --compile: also compiles every contract with each compiler recorded in the corpus that is installed
  * (`compact compile +<v> --skip-zk`) and reports any result that differs from the recorded one
@@ -23,14 +25,19 @@
  * Always: a fixed set of compiler messages whose explanation was once wrong (similar wording, a
  * different fix) is run through --explain, and each answer must contain the expected fix.
  *
- * Exit code: 0 = no false positives, every expected explanation (and, with --compile, no drift and
- *            every message explained), 2 = at least one of those failed, 1 = could not run.
+ * Exit code: 0 = no false positives, every expected warning and explanation (and, with --compile, no
+ *            drift and every message explained), 2 = at least one of those failed, 1 = could not run.
  */
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+
+if (Number(process.versions.node.split('.')[0]) < 20) {
+  console.error(`Node >= 20 is required (this is ${process.version})`);
+  process.exit(1);
+}
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const CHECK = path.join(HERE, 'check-compact.mjs');
@@ -99,6 +106,16 @@ const EXPLAIN_EXPECT = [
   ['Uint width 0 is not between 1 and the maximum Uint width 248 (inclusive)', 'Uint<0>'],
   ['another binding found for send in the same scope at line 2 char 1', 'prefix'],
 ];
+// Contracts that compile but are still wrong, and the warning each must get. The self-mint case's
+// right.compact is the catalogue's fix, which the runtime check showed counts the receipt twice (NOTES).
+const EXPECT_WARNING = {
+  'ownpublickey-for-authorization/wrong.compact': 'ownpublickey-auth',
+  'unshieldedbalance-in-conditional/wrong.compact': 'unshieldedbalance-compare',
+  'checkroot-result-branched/wrong.compact': 'checkroot-branch',
+  'merkle-path-not-bound/wrong.compact': 'merkle-path-unbound',
+  'mint-unshielded-to-self-without-receive/right.compact': 'self-mint-received',
+};
+
 let wrongExplanations = 0;
 for (const [msg, want] of EXPLAIN_EXPECT) {
   const e = run(['--explain', msg], HERE);
@@ -110,6 +127,7 @@ for (const [msg, want] of EXPLAIN_EXPECT) {
 
 const versions = Object.keys(corpus.compilers);
 let falsePositives = 0, caught = 0, leftToCompile = 0, drift = 0, unexplained = 0;
+let warned = 0, missedWarnings = 0, falseWarnings = 0;
 const skippedVersions = new Set();
 try {
   for (const c of corpus.cases) {
@@ -124,8 +142,17 @@ try {
       fs.writeFileSync(file, f.source);
       const r = run(['--json', file], dir);
       if (r.status === 1) throw new Error(`check-compact could not run on ${c.slug}/${name}: ${r.stderr}`);
-      const errors = JSON.parse(r.stdout).files[0].findings.filter((x) => x.severity === 'error');
+      const findings = JSON.parse(r.stdout).files[0].findings;
+      const errors = findings.filter((x) => x.severity === 'error');
       const rejected = f.results['0.31.1']?.exit !== 0;
+      const expected = EXPECT_WARNING[`${c.slug}/${name}`];
+      if (expected) {
+        if (findings.some((x) => x.rule === expected)) warned++;
+        else { missedWarnings++; console.log(`NO WARNING ${c.slug}/${name}: expected ${expected}`); }
+      } else if (name.startsWith('right') && findings.some((x) => x.severity === 'warning')) {
+        falseWarnings++;
+        console.log(`FALSE WARNING ${c.slug}/${name}: ${findings.filter((x) => x.severity === 'warning').map((x) => `${x.rule} at ${x.line}:${x.col}`).join(', ')}`);
+      }
       if (name.startsWith('right') && errors.length) {
         falsePositives++;
         console.log(`FALSE POSITIVE ${c.slug}/${name}: ${errors.map((e) => `${e.rule} at ${e.line}:${e.col}`).join(', ')}`);
@@ -158,6 +185,7 @@ try {
 const files = corpus.cases.reduce((n, c) => n + Object.keys(c.files).length, 0);
 console.log(`\n${corpus.cases.length} cases, ${files} files.`);
 console.log(`Static scan: ${caught} rejected wrong files flagged, ${leftToCompile} left to --compile, ${falsePositives} false positive(s) on right files.`);
+console.log(`Warnings: ${warned} of ${warned + missedWarnings} contracts that compile but are wrong get theirs, ${falseWarnings} on other right files.`);
 console.log(`Explanations: ${EXPLAIN_EXPECT.length - wrongExplanations} of ${EXPLAIN_EXPECT.length} look-alike messages get the expected fix.`);
 if (compile) console.log(`Compilers: ${drift} result(s) differ from the corpus, ${unexplained} message(s) without an explanation.`);
-process.exitCode = falsePositives || wrongExplanations || drift || unexplained ? 2 : 0;
+process.exitCode = falsePositives || missedWarnings || falseWarnings || wrongExplanations || drift || unexplained ? 2 : 0;
