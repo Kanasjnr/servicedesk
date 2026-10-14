@@ -308,6 +308,43 @@ function matchClose(code, i, open, close) {
   return -1;
 }
 
+// matchClose for every open bracket in one pass: open index -> index just past its close bracket.
+function bracketPairs(code, open, close) {
+  const pairs = new Map(), stack = [];
+  for (let j = 0; j < code.length; j++) {
+    if (code[j] === open) stack.push(j);
+    else if (code[j] === close && stack.length) pairs.set(stack.pop(), j + 1);
+  }
+  return pairs;
+}
+
+// Bodies of circuits and constructors, as [open brace, index past the close brace], in file order. A
+// circuit header ends at the next `{` (a body) or `;` (a declaration); that position is kept until the
+// scan passes it, so a file of headers with no body stays linear.
+function circuitBodies(code) {
+  const bodies = [], stop = /[{;]/g, paren = /\)/g, brace = /\s*\{/y;
+  let nextStop = -1, nextParen = -1, from = 0;
+  for (const h of code.matchAll(/\bcircuit\s+\w+|\bconstructor\s*\(/g)) {
+    if (h.index < from) continue;
+    const after = h.index + h[0].length;
+    let open;
+    if (h[0].startsWith('circuit')) {
+      if (nextStop < after) { stop.lastIndex = after; nextStop = stop.exec(code)?.index ?? code.length; }
+      if (code[nextStop] !== '{') { from = nextStop; continue; }
+      open = nextStop;
+    } else {
+      if (nextParen < after) { paren.lastIndex = after; nextParen = paren.exec(code)?.index ?? code.length; }
+      brace.lastIndex = nextParen + 1;
+      if (nextParen >= code.length || !brace.test(code)) continue;
+      open = brace.lastIndex - 1;
+    }
+    const end = matchClose(code, open, '{', '}');
+    if (end > 0) bodies.push([open, end]);
+    from = open + 1;
+  }
+  return bodies;
+}
+
 // ---------- pragma ----------
 const cmpVer = (a, b) => {
   const x = a.split('.').map(Number), y = b.split('.').map(Number);
@@ -472,11 +509,7 @@ function scan(file, src) {
   }
   {
     // Bodies of circuits and constructors, to scope const declarations.
-    const bodies = [];
-    for (const b of code.matchAll(/\b(?:circuit\s+[\w$]+[^{;]*|constructor\s*\([^)]*\)\s*)\{/g)) {
-      const open = b.index + b[0].length - 1, end = matchClose(code, open, '{', '}');
-      if (end > 0) bodies.push([open, end]);
-    }
+    const bodies = circuitBodies(code);
     for (const m of code.matchAll(/(?:^|[;{}]\s*)(\w+)\s*=(?!=)/gm)) {
       const name = m[1], at = m.index + m[0].indexOf(name);
       // Bodies are in file order and don't nest (circuits sit at the top level or in modules): binary search.
@@ -565,6 +598,104 @@ function scan(file, src) {
     const hint = has(METHOD_HINTS, next[1]) && ADT_METHODS[type].includes(METHOD_HINTS[next[1]]) ? ` Use ${METHOD_HINTS[next[1]]}().` : '';
     add(close, 'ledger-method', `The values of \`${m[1]}\` are ${type}s, and ${type} has no ${next[1]}().`, `${hint.trim()} ${type} methods: ${ADT_METHODS[type].join(', ')}.`.trim());
   });
+
+  // Code that compiles but is still wrong (the runbook's "Compiles, but still wrong"). Warnings only,
+  // so they don't change the exit code.
+  {
+    // Bracket pairs, computed once and only if a rule needs them (an unclosed bracket costs one pass,
+    // not one per call).
+    let parens, braces;
+    const closeParen = (i) => (parens ??= bracketPairs(code, '(', ')')).get(i) ?? -1;
+    const closeBrace = (i) => (braces ??= bracketPairs(code, '{', '}')).get(i) ?? -1;
+    // `const x = …;` bindings whose value contains a match for `re`, so a use through the const counts too.
+    const constsOf = (re) => {
+      const names = new Map();
+      for (const c of code.matchAll(/\bconst\s+(\w+)\s*(?::[^=;]{1,300})?=(?!=)([^;]*)/g))
+        if (re.test(c[2]) && !names.has(c[1])) names.set(c[1], c.index + c[0].indexOf(c[1], 5) + c[1].length);
+      return names;
+    };
+    // Each later use of those consts, as [index, name].
+    const usesOf = (names) => {
+      if (!names.size) return [];
+      return [...code.matchAll(/(?<![\w.])\w+(?!\w)/g)].filter((u) => names.has(u[0]) && u.index >= names.get(u[0])).map((u) => [u.index, u[0]]);
+    };
+    // Whether the expression at [start, end) is an operand of == / != ('eq') or of any comparison ('any').
+    const AFTER = { eq: /^(?:\s*\.\s*\w+)*\s*[!=]=/, any: /^(?:\s*\.\s*\w+)*\s*(?:[<>]=?|[!=]=)/ };
+    const BEFORE = { eq: /[!=]=\s*$/, any: /(?:[<>]=?|[!=]=)\s*$/ };
+    const comparedAt = (start, end, ops) => AFTER[ops].test(code.slice(end, end + 200)) || BEFORE[ops].test(code.slice(Math.max(0, start - 20), start));
+
+    if (!defined.has('ownPublicKey')) {
+      const problem = '`ownPublicKey()` compared with a key isn\'t authorization: the caller supplies it, and a key stored in the ledger is public, so anyone can pass by copying it. (This compiles.)';
+      const fix = 'Use the identity pattern: a secret returned from a witness, hashed with persistentHash, compared with the key in the ledger (runbook, "Invented functions").';
+      each(/\bownPublicKey\s*\(\s*\)/g, (m) => comparedAt(m.index, m.index + m[0].length, 'eq') && add(m.index, 'ownpublickey-auth', problem, fix, 'warning'));
+      for (const [at, name] of usesOf(constsOf(/\bownPublicKey\s*\(\s*\)/))) if (comparedAt(at, at + name.length, 'eq')) add(at, 'ownpublickey-auth', problem, fix, 'warning');
+    }
+
+    if (!defined.has('unshieldedBalance')) {
+      const problem = '`unshieldedBalance()` in a comparison records the exact balance in the public transcript, and the transaction fails if the balance changes before it lands. (This compiles.)';
+      const fix = 'Use unshieldedBalanceGt / unshieldedBalanceGte / unshieldedBalanceLt / unshieldedBalanceLte, which record only the yes/no.';
+      each(/\bunshieldedBalance\s*\(/g, (m) => {
+        const end = closeParen(m.index + m[0].length - 1);
+        if (end > 0 && comparedAt(m.index, end, 'any')) add(m.index, 'unshieldedbalance-compare', problem, fix, 'warning');
+      });
+      for (const [at, name] of usesOf(constsOf(/\bunshieldedBalance\s*\(/))) if (comparedAt(at, at + name.length, 'any')) add(at, 'unshieldedbalance-compare', problem, fix, 'warning');
+    }
+
+    if (/\.\s*checkRoot\s*\(/.test(code)) {
+      // `if (tree.checkRoot(…))`, or `if (ok)` with `const ok = tree.checkRoot(…)` used nowhere else, and
+      // no else branch: a bad root then just skips the branch.
+      const ifs = [...code.matchAll(/\bif\s*\(/g)].map((m) => [m.index, m.index + m[0].length - 1, closeParen(m.index + m[0].length - 1)]).filter(([, , e]) => e > 0);
+      // Whether the branch after the condition ending at `condEnd` has an else. Called in file order, so
+      // the next `;` is kept until the scan passes it.
+      let nextSemi = -1;
+      const space = /\s*/y;
+      const hasElse = (condEnd) => {
+        space.lastIndex = condEnd; space.test(code);
+        const s = space.lastIndex;
+        if (code[s] !== '{' && nextSemi < s) { nextSemi = code.indexOf(';', s); if (nextSemi < 0) nextSemi = code.length; }
+        const blockEnd = code[s] === '{' ? closeBrace(s) : nextSemi < code.length ? nextSemi + 1 : -1;
+        return blockEnd > 0 && /^\s*else\b/.test(code.slice(blockEnd, blockEnd + 20));
+      };
+      const viaConst = constsOf(/\.\s*checkRoot\s*\(/), uses = usesOf(viaConst);
+      // Conditions don't overlap: find the last one opened before `at`.
+      const inCondition = (at) => {
+        let lo = 0, hi = ifs.length - 1, last;
+        while (lo <= hi) { const mid = (lo + hi) >> 1; if (ifs[mid][1] < at) { last = ifs[mid]; lo = mid + 1; } else hi = mid - 1; }
+        return last !== undefined && at < last[2];
+      };
+      const onlyInIf = new Set([...viaConst.keys()].filter((n) => uses.some(([, u]) => u === n) && uses.every(([at, u]) => u !== n || inCondition(at))));
+      for (const [at, open, end] of ifs) {
+        const cond = code.slice(open, end);
+        if ((/\.\s*checkRoot\s*\(/.test(cond) || (onlyInIf.size && [...cond.matchAll(/(?<![\w.])\w+(?!\w)/g)].some((w) => onlyInIf.has(w[0]) && viaConst.get(w[0]) < at))) && !hasElse(end))
+          add(at, 'checkroot-branch', 'An `if` on the result of `checkRoot`: with a bad root the branch is skipped and the transaction still succeeds, silently. (This compiles.)', 'For a guard, use `assert(tree.checkRoot(disclose(root)), "bad root");`.', 'warning');
+      }
+    }
+
+    // Per circuit body: a Merkle path that isn't tied to the caller, and a self-mint received twice.
+    if (/\.\s*checkRoot\s*\(|\bmintUnshieldedToken\b/.test(code)) for (const [open, end] of circuitBodies(code)) {
+      const body = code.slice(open, end);
+      if (/\.\s*checkRoot\s*\(/.test(body) && !/\bleaf\s*:/.test(body)) {
+        // `path.leaf`, or `path.value.leaf` for a Maybe: the name the chain starts from.
+        const bound = new Set([...body.matchAll(/(?<![\w.])(\w+)(?:\s*\.\s*\w+)*?\s*\.\s*leaf\b/g)].map((l) => l[1]));
+        for (const r of body.matchAll(/\bmerkleTreePathRoot(?:NoLeafHash)?\s*(?:<[^;(){}]{0,300}>)?\s*\(/g)) {
+          const close = closeParen(open + r.index + r[0].length - 1);
+          if (close < 0) continue;
+          const args = [...code.slice(open + r.index + r[0].length, close - 1).matchAll(/(?<![\w.])\w+(?!\w)/g)].map((a) => a[0]);
+          if (!args.some((a) => bound.has(a))) add(open + r.index, 'merkle-path-unbound', 'A Merkle path checked against the root but not tied to the caller: it proves some member exists, not that the caller is one, and the paths are public. (This compiles.)', 'Bind it: `assert(path.leaf == commitment, "…")`, with `commitment` computed from the caller\'s secret. To stop a member using it twice, add a nullifier.', 'warning');
+        }
+      }
+      if (!defined.has('receiveUnshielded')) {
+        // `const color = mintUnshieldedToken(…, left<…>(kernel.self()))`, then `receiveUnshielded(color, …)`.
+        const minted = new Set();
+        for (const t of body.matchAll(/\bconst\s+(\w+)\s*(?::[^=;]{1,300})?=\s*mintUnshieldedToken\s*\(/g)) {
+          const close = closeParen(open + t.index + t[0].length - 1);
+          if (close > 0 && /\bkernel\s*\.\s*self\s*\(/.test(code.slice(open + t.index, close))) minted.add(t[1]);
+        }
+        if (minted.size) for (const r of body.matchAll(/\breceiveUnshielded\s*\(\s*(\w+)\s*,/g)) if (minted.has(r[1]))
+          add(open + r.index, 'self-mint-received', '`receiveUnshielded` after `mintUnshieldedToken` to the contract itself: the mint already records the receipt, so receiving the same tokens counts them twice. (This compiles.)', 'Drop the receiveUnshielded for the minted token.', 'warning');
+      }
+    }
+  }
 
   // dedupe (same rule, same position)
   const seen = new Set();
