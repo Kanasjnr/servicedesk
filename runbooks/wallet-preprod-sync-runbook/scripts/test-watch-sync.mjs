@@ -183,6 +183,28 @@ results.push(
   ),
 );
 
+// Stuck through repeated sleeps, each shorter awake stretch below the threshold: awake time adds up across
+// the sleeps, so the stall is still reported (a reset on every wake-up would never warn here).
+results.push(
+  await run(
+    'stuck through repeated sleeps',
+    async (logger) => {
+      const wallet = fakeWallet(facadeState({ dust: progress(45_693n, 1_650_046n, false), shielded: progress(1_650_108n, 1_650_108n, true) }));
+      const stop = watchSync(wallet, { everyMs: TICK, stallMs: STALL, logger });
+      for (let i = 0; i < 3; i++) {
+        await sleep(TICK * 4); // awake for less than the stall threshold
+        freeze(STALL); // asleep
+      }
+      await sleep(TICK * 3);
+      stop();
+    },
+    (lines) => [
+      ...expectSome(lines, /^INFO sync: this process was paused/),
+      ...expectSome(lines, /^WARN sync: dust has not moved for \d+ min \(at 45693 of 1650046\)/),
+    ],
+  ),
+);
+
 // stop() ends the logging.
 results.push(
   await run(

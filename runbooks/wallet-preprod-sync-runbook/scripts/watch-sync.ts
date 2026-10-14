@@ -11,7 +11,7 @@
  * synced yet doesn't move for 10 minutes, it prints a warning instead: that sync is stuck, not slow.
  * Each sub-wallet is watched on its own, because a shielded wallet at the tip keeps moving with every
  * new block while DUST can be stuck far behind. Time the process spends suspended (a laptop asleep)
- * isn't counted: after a wake-up it says so and starts the 10 minutes again.
+ * isn't counted: after a wake-up it says so, and only awake time adds up towards the 10 minutes.
  *
  * It only reads `progress`, which every sub-wallet state exposes in wallet SDK 1.2.0. Nothing is
  * sent, signed or stored. Plain `console`; pass your own logger if you have one.
@@ -68,11 +68,15 @@ export function watchSync(
     const now = Date.now();
     const current = positions(latest);
     const seconds = previous ? (now - previous.at) / 1000 : 0;
-    // A timer this late means the process was suspended (a laptop asleep): that time isn't a stall.
-    const paused = seconds * 1000 > 3 * everyMs;
+    // A timer this late means the process was suspended (a laptop asleep). The time asleep isn't a
+    // stall, so it is added back to each stall clock; the awake time before and after keeps counting,
+    // so a sync that stays stuck across repeated sleeps is still reported.
+    const paused = previous !== undefined && seconds * 1000 > 3 * everyMs;
+    const asleepMs = paused ? now - previous!.at - everyMs : 0;
 
     for (const name of NAMES) {
-      if (paused || current[name].applied !== previous?.applied[name]) lastMove[name] = now;
+      if (current[name].applied !== previous?.applied[name]) lastMove[name] = now;
+      else lastMove[name] += asleepMs;
     }
     const stuck = NAMES.filter((name) => !current[name].synced && now - lastMove[name] >= stallMs);
 
