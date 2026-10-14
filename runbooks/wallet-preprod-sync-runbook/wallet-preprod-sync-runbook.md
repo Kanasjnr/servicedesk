@@ -36,7 +36,7 @@ _Event counts, rates and snapshot ages change daily. Re-check them before quotin
 | DUST `appliedIndex` far below the block height (for example 1,575,381 against 2,766,750) | Not a problem: `appliedIndex` counts DUST events, not blocks (→ 3) |
 | `appliedIndex` doesn't move for 10 minutes or more while the app reports connected, often after the machine slept | A real stall (→ 4) |
 | `Wallet.Sync: [object ErrorEvent]` again and again after the machine woke, minutes apart, with no progress | Retries failing further and further apart: a real stall (→ 4) |
-| `values inserted non-linearly into dust commitment tree; expected index N, but received M`, repeating | A real stall: the saved state doesn't match the indexer (→ 4) |
+| `values inserted non-linearly into dust generation tree; expected to insert index N, but received M`, repeating (another tree's name in place of `dust generation` is the same error; older ledgers say `expected index N`) | A real stall: the saved state doesn't match the indexer (→ 4) |
 | A restored wallet takes a minute or more before any progress, longer each week | Rebuilding the saved DUST tree, which keeps growing (→ 5) |
 | Out of memory during the first sync of a fresh Preprod wallet | Fixed in wallet SDK 1.2.0 ([servicedesk#104](https://github.com/midnightntwrk/servicedesk/issues/104)); upgrade |
 
@@ -120,7 +120,8 @@ _Event counts, rates and snapshot ages change daily. Re-check them before quotin
      or a stale or damaged snapshot (midnight-examples `FAST-SYNC.md`, "When a bundle goes bad").
    - On wallet SDK 1.1.x the same error also came from a re-sent boundary event, which moth-wallet
      documented in `docs/upstream/wallet-sdk-sync-applyUpdate-off-by-one.md`. 1.2.0 drops events at or
-     below `appliedIndex` before applying them, so that cause is gone.
+     below `appliedIndex` before applying them, so that cause is gone in 1.2.0. A plain npm install
+     still gets 1.1.0, though: see the version check at the start of Diagnose.
 5. **Restoring isn't free, and it gets slower.** A saved DUST state holds the whole generation tree:
    the DUST part of midnight-examples' Preprod snapshot (cut at event 1,576,656) is 12.7 MB, and
    they timed `dust.restore()` at about 72 s for a tree of about 10.9 MB. The tree keeps every other
@@ -154,6 +155,17 @@ _Event counts, rates and snapshot ages change daily. Re-check them before quotin
 
 ## Diagnose (no wallet keys)
 
+First, check which wallet SDK is installed. This runbook is for wallet SDK 1.2.0, but npm's `latest`
+tag still points at 1.1.0, so a plain `npm install @midnight-ntwrk/wallet-sdk` or a `^1.1.0` range
+installs 1.1.0 with `wallet-sdk-dust-wallet` 4.1.0. That version has neither the per-event boundary
+filter (cause 4) nor the indexer backpressure, so it can still hit errors this runbook calls fixed.
+
+```bash
+npm ls @midnight-ntwrk/wallet-sdk @midnight-ntwrk/wallet-sdk-dust-wallet @midnight-ntwrk/wallet-sdk-indexer-client
+```
+
+Expect 1.2.0, 4.2.0 and 1.2.3. Anything else: install `@midnight-ntwrk/wallet-sdk@1.2.0` exactly.
+
 1. **Run the checker.** It needs Node 22 or later and no install. For Preprod it reads the
    Blockfrost project id from `BLOCKFROST_PROJECT_ID` and never prints it:
 
@@ -170,24 +182,28 @@ _Event counts, rates and snapshot ages change daily. Re-check them before quotin
    - **Delivery:** how fast the indexer streams DUST events. On Preprod it compares that with the
      290 to 380 a second a wallet applies: if the indexer is faster, a slow sync is the wallet's
      work. On other networks it gives the time to stream every event instead, because the apply
-     rate there wasn't measured.
+     rate there wasn't measured. A WARN means the indexer or your connection is the slow part:
+     check the connection and try again later or from another network before suspecting the
+     wallet.
    - **Saved state** (`--state`, one file per sub-wallet): the position each file was saved at,
      how far behind the indexer it is, and its size. A position past the indexer's newest event
      means it was saved against another indexer and will stall when restored (FAIL); a file saved
-     on another network fails too.
+     on another network fails too. A position within range is only plausible: state saved through
+     the official Preprod indexer is 22 ids out from Blockfrost, passes, and still stalls when
+     restored. Only where the state came from tells you that.
 
    It reads only; exit code 0 means no FAIL, 2 at least one, 1 that it couldn't run. On Preprod on
-   2026-10-13, with a wallet saved partway through its first sync:
+   2026-10-14, with a wallet saved partway through its first sync:
 
    ```text
    check                               found                                                           status  note
-   Indexer                             https://midnight-preprod.blockfrost.io/api/v0: block 2,964,458  OK
-   DUST events                         newest id 1,651,770                                             INFO    a fresh wallet replays all of these, from every owner
-   Shielded events                     newest id 1,651,768                                             INFO
-   DUST delivery                       14,218 events/s over 10 s                                       OK      faster than a wallet applies them: a slow sync here is the wallet, not the indexer
-   Fresh-wallet sync                   about 72-95 min of DUST replay                                  INFO    at the 290-380 events/s measured on fast machines; slower or busy machines take longer. A brand-new wallet can start from a pre-built snapshot instead (runbook, Remediation 3)
-   State shielded (shielded.json)      offset 1,650,108, 1,660 events behind, 4 KB                     OK      resumes from here
-   State dust (dust.json)              offset 45,693, 1,606,077 events behind, 382 KB                  OK      resumes from here, about 70-92 min to catch up; restoring it rebuilds a 382 KB tree before syncing resumes (about 72 s for 11 MB on a fast machine, more as it grows)
+   Indexer                             https://midnight-preprod.blockfrost.io/api/v0: block 2,976,054  OK
+   DUST events                         newest id 1,656,549                                             INFO    a fresh wallet replays all of these, from every owner
+   Shielded events                     newest id 1,656,442                                             INFO
+   DUST delivery                       12,614 events/s over 10 s                                       OK      faster than a wallet applies them: a slow sync here is the wallet, not the indexer
+   Fresh-wallet sync                   about 73-95 min of DUST replay                                  INFO    at the 290-380 events/s measured on fast machines; slower or busy machines take longer. A brand-new wallet can start from a pre-built snapshot instead (runbook, Remediation 3)
+   State shielded (shielded.json)      offset 1,650,108, 6,334 events behind, 4 KB                     OK      plausible: within this indexer's range, but a state saved against another indexer can be too (runbook, Remediation 2)
+   State dust (dust.json)              offset 45,693, 1,610,856 events behind, 382 KB                  OK      plausible: within this indexer's range, but a state saved against another indexer can be too (runbook, Remediation 2), about 71-93 min to catch up; restoring it rebuilds a 382 KB tree before syncing resumes (about 72 s for 11 MB on a fast machine, more as it grows)
    State unshielded (unshielded.json)  appliedId 0, 1 KB                                               INFO    resumes from this transaction id
 
    RESULT: nothing here stops a sync. If it still looks stuck, log its progress with scripts/watch-sync.ts (runbook, Diagnose step 2).
@@ -210,7 +226,8 @@ _Event counts, rates and snapshot ages change daily. Re-check them before quotin
    If a sub-wallet that isn't synced yet doesn't move for 10 minutes, it prints a warning naming it
    instead. Each sub-wallet is watched on its own, because shielded keeps moving with every new
    block while DUST can be stuck far behind. Time the process spends suspended isn't counted: after
-   a wake-up it says so and starts the 10 minutes again. From a wallet restored at DUST event 45,693
+   a wake-up it says so, and only awake time adds up towards the 10 minutes, so a sync that stays
+   stuck across repeated sleeps is still reported. From a wallet restored at DUST event 45,693
    and suspended for 15 minutes (timestamps added by our logger):
 
    ```text
@@ -221,14 +238,18 @@ _Event counts, rates and snapshot ages change daily. Re-check them before quotin
    15:41:34 sync: dust 65462/1651908 at 191/s, about 139 min left | shielded 1651906/1651906 at 0/s | unshielded 0/0 at 0/s
    ```
 
-   For the quiet stream in cause 4 (DUST stuck at 57,212), the warning reads:
+   A stuck sync, live: a fresh Preprod wallet whose DUST subscription was held open but silent (the
+   quiet stream in cause 4, reproduced with a relay, [servicedesk#251](https://github.com/midnightntwrk/servicedesk/issues/251)).
+   Shielded kept syncing, and ten minutes after DUST stopped, the watcher at its default settings
+   printed:
 
    ```text
-   sync: dust has not moved for 10 min (at 57212 of 1651660). This is a stall, not a slow sync: check the log for "values inserted non-linearly" and see the runbook.
+   10:47:25 sync: dust 5890/1656548 at 0/s | shielded 1652327/1656442 at 50/s, about 2 min left | unshielded 0/0 at 0/s
+   10:47:55 sync: dust has not moved for 10 min (at 5890 of 1656548). This is a stall, not a slow sync: check the log for "values inserted non-linearly" and see the runbook.
    ```
 
    [`scripts/test-watch-sync.mjs`](scripts/test-watch-sync.mjs) checks these rules against a fake
-   wallet (7 cases, no network).
+   wallet (8 cases, no network).
 
 3. **Decide slow or stuck** from those lines:
    - **Slow:** DUST's `appliedIndex` keeps rising. On Preprod expect the 70-to-95-minute replay on a
@@ -258,7 +279,7 @@ _Event counts, rates and snapshot ages change daily. Re-check them before quotin
 
    ```ts
    import fs from 'node:fs';
-   import { DustWallet, ShieldedWallet, UnshieldedWallet } from '@midnight-ntwrk/wallet-sdk';
+   import { DustWallet, PublicKey, ShieldedWallet, UnshieldedWallet } from '@midnight-ntwrk/wallet-sdk';
 
    const file = (name: string) => `wallet-state/${name}.json`;
    const saved = fs.existsSync(file('dust'));
@@ -288,8 +309,11 @@ _Event counts, rates and snapshot ages change daily. Re-check them before quotin
 
    Three rules:
    - **The same network and the same indexer.** State saved through the official indexer, or on
-     another network, doesn't carry over (the checker FAILs it); see the
+     another network, doesn't carry over; see the
      [cursor runbook](../wallet-sync-cursor-indexer-mismatch-runbook/wallet-sync-cursor-indexer-mismatch-runbook.md).
+     The checker FAILs state saved on another network or past this indexer's newest event, but not
+     state that is only a few ids out: state from the official Preprod indexer is 22 ids out from
+     Blockfrost and passes. Restore only state saved against the indexer you use now.
    - **One process per wallet.** Two processes syncing the same saved wallet fight over the files
      and the subscriptions.
    - **Keep the files private.** They hold no keys, but they list the wallet's coins.
@@ -322,8 +346,8 @@ _Event counts, rates and snapshot ages change daily. Re-check them before quotin
 5. **Restart a stalled sync** (cause 4, wallet SDK 1.2.0). When `watch-sync.ts` warns that a
    sub-wallet hasn't moved for 10 minutes and the log has no `values inserted non-linearly…`, stop
    the app and start it again, restoring from the state it saved (Remediation 2), so it resumes
-   where it was. Each of the three times we did this, the wallet was back at its saved position
-   within a second and synced on. Save on a timer as well as at shutdown, so a restart loses a few
+   where it was. Each of the three times a process was started from saved state in these tests,
+   the wallet was back at its saved position within a second and synced on. Save on a timer as well as at shutdown, so a restart loses a few
    minutes at most. For a long first sync, keep the machine awake: `caffeinate -i <command>` on
    macOS, `systemd-inhibit <command>` on Linux.
 

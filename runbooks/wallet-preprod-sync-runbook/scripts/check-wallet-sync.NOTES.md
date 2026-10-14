@@ -35,6 +35,15 @@ quote ours only as what a busy laptop does.
     laptop's sleep), resumes it with `kill -CONT`, and counts its open TCP connections with `lsof`
     every minute.
 
+**What a plain install gets (checked 2026-10-14, found in review).** npm's `latest` tag for
+`@midnight-ntwrk/wallet-sdk` is 1.1.0, and for `wallet-sdk-dust-wallet` and
+`wallet-sdk-indexer-client` it is 4.1.0 and 1.2.2. npm prefers the `latest` version when it fits the
+range, so `npm install @midnight-ntwrk/wallet-sdk` gets 1.1.0 with dust-wallet 4.1.0. That version
+subscribes from `appliedIndex` itself and skips a batch only when the batch's last event is already
+applied (`dist/v1/Sync.js:111-136`), which is the boundary-event off-by-one; 4.2.0 filters event by
+event (`Sync.js:146`). indexer-client 1.2.2 has no `Backpressure.js`. Installing
+`@midnight-ntwrk/wallet-sdk@1.2.0` gets dust-wallet 4.2.0 and indexer-client 1.2.3.
+
 ## Indexer numbers (Preprod through Blockfrost)
 
 | Measure | Result |
@@ -171,28 +180,39 @@ tests can fail, seven changes were made to a copy of the checker. Six failed at 
 seventh (dropping one of the two unshielded-file checks) passes by design, because the other check
 still recognises the file; dropping both fails.
 
+What the checker can't see, found in review: a saved state whose position is wrong but still within
+this indexer's range. A real DUST state with its offset moved 22 ids ahead (the gap between the
+official Preprod indexer and Blockfrost) passes, and restoring it stalls with `values inserted
+non-linearly`. Its OK note now says the position is only plausible and points to Remediation 2. A
+WARN row (slow delivery, offset 0) is now named in the RESULT line instead of "nothing here stops a
+sync"; the silent-stream test case checks that line.
+
 ## watch-sync.ts
 
 - **Types:** strict `tsc --noEmit` with TypeScript 5.6.3 and `skipLibCheck`, under both
-  `--module NodeNext` and `--moduleResolution Bundler`, together with Remediation 2's save and
-  restore snippet.
-- **Live:** pause 2 (the first version, which led to the per-sub-wallet rule) and pause 3 (the
-  current version, the wake-up line).
+  `--module NodeNext` and `--moduleResolution Bundler`. Remediation 2's save and restore snippet is
+  checked as printed: extracted from the runbook and compiled with only the names it takes from its
+  surroundings declared, typed from the wallet SDK's own signatures. (Review found the printed
+  import line missing `PublicKey`; the earlier check had used a copy with its own imports.)
+- **Live:** pause 2 (the first version, which led to the per-sub-wallet rule), pause 3 (the
+  wake-up line), and on 2026-10-14 a fresh Preprod wallet whose DUST subscription a relay held open
+  but silent (the servicedesk#251 reproduction) with the watcher at its defaults. DUST stopped at
+  5,890 at 10:37:42 UTC while shielded kept syncing at up to 977 events a second, and the warning
+  printed at 10:47:55: `dust has not moved for 10 min (at 5890 of 1656548)`.
 - **Tests:** [`test-watch-sync.mjs`](test-watch-sync.mjs) runs it against a fake wallet whose
   positions the test moves, with time scaled down (a 40 ms tick, a 200 ms threshold) and a blocked
-  event loop standing in for a suspended process. 7 cases: DUST stuck while shielded moves, slow
-  but moving, synced and idle, nothing received at all, suspended, still stuck after waking, and
-  `stop()`. All pass on Node 22.19.0 and 24.20.0. Four changes to a copy were each caught: no
-  wake-up check, warning on synced sub-wallets, one stall clock for all three (the first
-  version's rule), and `stop()` leaving the timer running.
-- **The warning line in the runbook** is the real function's output for DUST at 57,212 of
-  1,651,660 with shielded moving, under a fake clock that advances 30 s a tick, so the default
-  10 minutes applies unchanged.
+  event loop standing in for a suspended process. 8 cases: DUST stuck while shielded moves, slow
+  but moving, synced and idle, nothing received at all, suspended, still stuck after waking, stuck
+  through repeated sleeps, and `stop()`. All pass on Node 22.19.0 and 24.20.0. Five changes to a
+  copy were each caught: no wake-up check, warning on synced sub-wallets, one stall clock for all
+  three (the first version's rule), `stop()` leaving the timer running, and resetting the stall
+  clocks on every wake-up (the version before review, which never warned if the machine slept
+  more often than every 10 awake minutes).
+- **Sleep handling, changed in review:** a wake-up now adds the time asleep back to each stall clock
+  instead of restarting it, so awake time adds up across sleeps. The wake-up message is unchanged.
 
 ## Not tested
 
 - Restarting only the wallet inside a running process (`wallet.stop()`, then restore and start):
   pause 3 was set up for it, but no warning came before the run ended.
 - Wallet SDK 2.x, mainnet, Linux, and an indexer other than Blockfrost for the quiet stream.
-- A live 10-minute warning from the current watch-sync: the warning line comes from the fake clock
-  above.
