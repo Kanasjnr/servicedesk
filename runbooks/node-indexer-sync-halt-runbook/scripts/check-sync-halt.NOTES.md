@@ -129,7 +129,7 @@ from its side.
   `dust actions out of TTL range` warning when that is all there is. From the same text it reads the
   transaction hash, the height (from 4.3.800-rc.2's halt line), and the node's `Imported #N` lines.
 - **Its sources:** a node at `127.0.0.1:9944`, if `system_chain` names the same network; then `--rpc`
-  (`ws://` and `wss://` are read as `http://` and `https://`) and `--indexer`; then the public indexer
+  (WebSocket URLs, with a `ws` or `wss` scheme, are read as `http` or `https`) and `--indexer`; then the public indexer
   and RPC. Preprod and Mainnet ones need `BLOCKFROST_PROJECT_ID`. Each lookup goes to the first
   source that has the answer, so a node stopped at the parent still helps. Without `--network`, the
   network comes from the first node that answers.
@@ -206,8 +206,8 @@ the checker got all three right. The runbook alone didn't get it to a safe fix:
 - **The Diagnose command failed on Mainnet without a token.** The runbook never showed passing your
   own node. The command now has `--rpc http://<your node>:9944`, and the runbook says a stopped node
   can't supply its own next block.
-- **A `ws://` node URL**, as in an indexer's config, came out as "not a known pattern". The checker
-  now reads it as `http://`.
+- **A WebSocket node URL** (scheme `ws`), as in an indexer's config, came out as "not a known
+  pattern". The checker now reads it as HTTP.
 - **Exit 2 covered four outcomes.** Exit 3 now means the block couldn't be found or confirmed.
 - **The indexer upgrade couldn't be done from the runbook.** Remediation 1 now has:
   - the config snippet and the environment-variable rename;
@@ -252,7 +252,7 @@ interpolated ones in between. Node 20.19.1, macOS: 24 of 24 cases pass in about 
 |---|---|
 | The halts as reported | Mainnet 2998112 (indexer, by time, confirmed by the TTL, runtime 1.0.300 warning) and 1788980 (node, no warning): A; Preprod 164460 (by hash, through the token-gated indexer): A; Preview 112450 from stdin: B; Preview 128537 (v4.3.4): A |
 | Other inputs | "TTL too far" with the chains' 14-day window: B; 4.3.800-rc.2's halt line with a height (used directly, no search); a transaction invalid at both times (exit 2); no halt error (exit 2) |
-| Sources | no token and no node for Preprod (exit 1, says why); a node stopped at the parent with no other source ("probably 1788980", exit 3); the same with a second source (A); nothing has the block (exit 3); a local node on another network (not used, says so); the network inferred from `--rpc`; a `ws://` URL; an RPC that drops every other request (retried, A); one that drops every block lookup (exit 3, says why) |
+| Sources | no token and no node for Preprod (exit 1, says why); a node stopped at the parent with no other source ("probably 1788980", exit 3); the same with a second source (A); nothing has the block (exit 3); a local node on another network (not used, says so); the network inferred from `--rpc`; a WebSocket (`ws`) URL; an RPC that drops every other request (retried, A); one that drops every block lookup (exit 3, says why) |
 | Output and releases | `--json`; `--offline` makes no GitHub or Docker Hub call; `--versions` lists only fixed tags (an alpha tag is skipped) and fetches `latest` by name; a rate-limited GitHub (exit 1 for `--versions` alone, exit 0 for a diagnosis) |
 | Tokens | a token in the environment and in `--indexer` and `--rpc` URLs never appears in any output, including "found by" and error lines; the GitHub token is sent as a header and never printed |
 
@@ -269,7 +269,7 @@ interpolated ones in between. Node 20.19.1, macOS: 24 of 24 cases pass in about 
 | no block time + 12 s (v4.3.4) case | 1 |
 | every block "holds" the transaction | 1 |
 | the ledger's default 3600 s TTL window | 1 |
-| no `ws://` rewrite | 1 |
+| no WebSocket-URL rewrite | 1 |
 | no runtime 1.0.300 warning | 1 |
 | no retry on a network error | 1 |
 

@@ -237,7 +237,7 @@ const cases = [
     const r = await run(['--network', 'preview', '--offline', '--error', 'index_blocks_task failed: apply transactions to ledger state: cannot apply regular transaction 3864da188d7c1d85062c914f879e1e4c096d443abf139aa9717b5266945959e8: malformed transaction: transaction application error detected during verification: Intent TTL has expired. TTL: Timestamp(1784987084), Current block: Timestamp(1784987088)']);
     return [r.code === 0, /Block: 128537 /.test(r.stdout), /checked it at the block's own time \+ 12 s \(1784987088\)/.test(r.stdout), /Only indexer v4\.3\.4 does that/.test(r.stdout), !/v4\.3\.5 to/.test(r.stdout)];
   }],
-  ['a ws:// node URL is read as http://', async () => {
+  ['a WebSocket (ws) node URL is read as HTTP', async () => {
     const r = await run(['--network', 'mainnet', '--offline', '--rpc', `${BASE.replace('http', 'ws')}/rpc/mainnet`, '--error', MAINNET_2998112]);
     return [r.code === 0, /note: read ws:\/\/.* as http:\/\//.test(r.stdout), /Block: 2998112 /.test(r.stdout)];
   }],

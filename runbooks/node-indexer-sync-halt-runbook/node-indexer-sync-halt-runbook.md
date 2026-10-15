@@ -183,8 +183,8 @@ like it can appear on any network at any time.
    - **Block data:** the checker asks, in order: a node at `http://127.0.0.1:9944` if it answers for
      the same network; each `--rpc` and `--indexer` you pass; then the network's public indexer and
      RPC. Preview's are free; Preprod's and Mainnet's are Blockfrost's and need
-     `BLOCKFROST_PROJECT_ID`, which is never printed. A `ws://` or `wss://` node URL, as in an indexer's
-     config, is read as `http://` or `https://`.
+     `BLOCKFROST_PROJECT_ID`, which is never printed. A WebSocket node URL (`ws` or `wss` scheme), as in an
+     indexer's config, is read as HTTP or HTTPS.
    - **A stopped node can't help with its own halt:** it doesn't have the block it stopped on. Pass
      another node with `--rpc`. While they still answer, the retired Midnight endpoints
      (`https://rpc.mainnet.midnight.network`, `https://rpc.preprod.midnight.network`) work for this

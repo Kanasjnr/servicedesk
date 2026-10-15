@@ -19,7 +19,7 @@
  *
  * Block data comes from the first source that has it:
  *   1. a node at http://127.0.0.1:9944, if it answers for the same network;
- *   2. --rpc <url> (a node's JSON-RPC; ws:// and wss:// URLs are read as http:// and https://) and
+ *   2. --rpc <url> (a node's JSON-RPC; WebSocket URLs, scheme ws or wss, are read as http or https) and
  *      --indexer <url> (a GraphQL indexer), repeatable;
  *   3. the network's public indexer and RPC. Preprod and Mainnet ones are Blockfrost's and need
  *      BLOCKFROST_PROJECT_ID in the environment.
@@ -273,7 +273,7 @@ async function sourcesFor(network) {
     else notes.push(`${LOCAL_RPC} answers for "${chain}", so it isn't used`);
   } catch { /* no node on this machine: fine */ }
   for (const given of opts.rpc) {
-    // A node serves JSON-RPC over HTTP on the same port as its WebSocket; indexer configs hold ws:// URLs.
+    // A node serves JSON-RPC over HTTP on the same port as its WebSocket; indexer configs hold WebSocket (ws) URLs.
     const u = given.replace(/^ws(s?):\/\//, 'http$1://');
     if (u !== given) notes.push(`read ${redact(given)} as ${redact(u)}`);
     const s = rpcSource(u, redact(u));
