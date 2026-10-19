@@ -1,484 +1,149 @@
-# Runbook: Migrating a Midnight app from the official indexer/RPC to Blockfrost
-
-> **Mainnet and preprod (updated 2026-10-07).** The Midnight-hosted mainnet and preprod
-> indexer and RPC (`indexer.mainnet.midnight.network`, `rpc.mainnet.midnight.network`,
-> `indexer.preprod.midnight.network`, `rpc.preprod.midnight.network`) shut down on
-> **Friday 2026-10-09 at 18:00 ET / 22:00 UTC**. After that, indexer and RPC access for both
-> networks is through Blockfrost or your own indexer. Already on Blockfrost? Stay there.
-> Preview is unchanged for now. Everything below applies to both networks: the same URL swap
-> and `project_id` token, the same cursor break, the same progress lag. The worked case and
-> every measured number come from preprod, whose endpoints are in
-> [Key identifiers](#key-identifiers). On mainnet:
->
-> | Service | Official (shuts down 2026-10-09) | Blockfrost |
-> |---|---|---|
-> | Indexer HTTP (GraphQL) | `https://indexer.mainnet.midnight.network/api/v4/graphql` | `https://midnight-mainnet.blockfrost.io/api/v0` |
-> | Indexer WS | `wss://indexer.mainnet.midnight.network/api/v4/graphql/ws` | `wss://midnight-mainnet.blockfrost.io/api/v0/ws` |
-> | Node RPC HTTP | `https://rpc.mainnet.midnight.network` | `https://rpc.midnight-mainnet.blockfrost.io` |
-> | Node RPC WS | `wss://rpc.mainnet.midnight.network` | `wss://rpc.midnight-mainnet.blockfrost.io` (same pattern as preprod; not yet verified on mainnet) |
->
-> - **Create a Blockfrost project for each network you use (Midnight Mainnet, Midnight
->   Preprod).** Tokens are per network, so a preprod token gets `403` on mainnet. Append
->   `?project_id=<token>` to every URL, as in [Remediation](#remediation) step 1.
-> - **Only saved wallet state from the official indexer is at risk.** The cursor break needs
->   both of these: a wallet that **persisted** its sync state while connected to the official
->   mainnet or preprod indexer (`serializeState()` output, a fast-sync/preseed bundle, or
->   stored ledger-event or transaction ids), **and** that state then resumed against
->   Blockfrost.
->   Not affected:
->   - wallet apps that already sync through Blockfrost, or run their own indexer: the
->     shutdown doesn't change their indexer
->   - wallets that sync from genesis on every start
->   - apps that only read contract state (by address, block height or block hash) or submit
->     transactions over RPC: these carry no indexer-issued ids
->
->   On preprod the offsets are measured (−22 ledger events, −30 transactions), so saved
->   preprod state from the official indexer is known not to be portable. They have **not**
->   been measured on mainnet, and mainnet numbering may match. Until it's measured, treat
->   affected saved state as not portable. Don't shift cursors. If sync stalls with
->   `values inserted non-linearly…`, discard that wallet's saved state and re-sync it from
->   genesis ([Remediation](#remediation) step 2). A wallet that syncs cleanly needs no
->   action.
-> - **Measure the offset before the shutdown if you can.** `check-indexer-cursor.mjs`
->   compares two live indexers, so run it against mainnet (`--a-http`/`--a-ws` official,
->   `--b-*` Blockfrost) before 18:00 ET on Friday 2026-10-09. Afterwards it can't help: use
->   the stall symptom above instead.
-> - **Mainnet full-sync time is not measured.** Size sync timeouts generously, well above
->   the 67 min measured on preprod.
-> - **Check endpoints and auth** with [Diagnose](#diagnose) step 1, using the mainnet URLs.
->   `system_chain` should return `"Midnight Mainnet"`.
-
-Moving a preprod app off `indexer.preprod.midnight.network` / `rpc.preprod.midnight.network`
-and onto Blockfrost is mostly a URL swap plus a `project_id` token. The preprod hosts shut
-down at the same time as mainnet, at 22:00 UTC on 2026-10-09. There are two breaks:
-
-- **Blockfrost numbers ledger events and transactions differently from the official
-  indexer.** Any wallet sync cursor or fast-sync (preseed) bundle made against one indexer
-  fails on the other.
-- **Blockfrost's indexer slows its unshielded progress updates on idle subscriptions.**
-  Code that waits a short, fixed time for an "unshielded synced" state right after a
-  transaction then times out, even though the funds have arrived.
-
-Use this runbook to do the migration, recognise both failures, and pick a remediation.
-
-_Compiled 2026-09-29 from a preprod migration of the `midnight-examples` hello-world suite,
-and extended 2026-09-30 from migrating the whole repo (10 suites, the preseed cutter and
-the wallet minter) and running it against preprod node 1.0.400
-(`@midnight-ntwrk/wallet-sdk` 1.2.0, `@midnight-ntwrk/ledger-v8` 8.1.2, midnight-js and testkit-js 4.1.1).
-Updated 2026-10-07 for the 9 October shutdown of the Midnight-hosted mainnet and preprod
-endpoints. Event ids, offsets and schema fields are point-in-time. Re-run the diagnostic
-before asserting any of them. The Midnight ecosystem changes fast._
-
 ---
+title: "Moving to Blockfrost: what the docs migration guide does not cover"
+when_to_use: "A preprod or mainnet app has moved from the Midnight-hosted indexer and RPC to Blockfrost and the fix in the docs migration guide was not enough: a wallet restored from saved state or a preseed bundle will not sync, or a funding step times out."
+audience: "developers support-agents"
+owner: "mn-servicedesk"
+compiled: "2026-09-29"
+last_reviewed: "2026-10-12"
+error_strings:
+  - "ENDPOINT_DECOMMISSIONED"
+  - "Missing project token. Please include project_id in your request."
+  - "Invalid project token."
+  - "TypeError: Invalid URL"
+  - "values inserted non-linearly into dust generation tree"
+  - "Wallet sync timeout after 90000ms"
+review_when:
+  - "The docs page guides/networks-and-environments gains a fix this runbook also gives: cut it here, so the runbook still adds only what the docs leave out"
+  - "Blockfrost changes how often its indexer sends progress messages: the Blockfrost half of Root cause 2 is measured, not sourced"
+---
+
+# Runbook: Moving to Blockfrost, beyond the docs migration guide
+
+The docs own this migration. Start with [Migrating from the Midnight-hosted endpoints](https://docs.midnight.network/guides/networks-and-environments#migrating-from-the-midnight-hosted-mainnet-endpoints). This runbook covers only what that page leaves out: saved wallet state and bundles from the old indexer, a funding wait you cannot configure, how to confirm the move worked, and when to stop.
+
+Each fact is in Key identifiers with its source. A claim marked **measured**, **inferred** or **not tested** has none, so trust it less.
 
 ## Symptom
 
-Four failures show up in migration order. The last two are the subtle ones.
+| If you see | Go to |
+|---|---|
+| An error that names a preprod or mainnet host ending in `midnight.network`, including `ENDPOINT_DECOMMISSIONED` | The docs guide: the config still points at an old endpoint. Then Diagnose 1. |
+| HTTP 403 from Blockfrost, such as `Missing project token. Please include project_id in your request.` or `Invalid project token.` | The docs guide. Then Confirm fixed. |
+| `TypeError: Invalid URL` while a wallet is built | The docs guide. Then Confirm fixed. |
+| After the switch, wallet sync never finishes and the log repeats `values inserted non-linearly into dust generation tree`, or the same text for another tree | Diagnose 2 |
+| `Wallet sync timeout after 90000ms` right after funding, although the funds are on chain | Remediation 3 |
+| One `Wallet.Sync: [object Object]` or `[object CloseEvent]` per sub-wallet, after which sync carries on (measured) | No action. Inferred: a subscription dropped and resumed. If it repeats and sync makes no progress, Stop and escalate. |
 
-- **Every Blockfrost call returns 403.** Indexer HTTP, indexer WS and node RPC all answer
-  `{"error":"Forbidden","message":"Missing project token. Please include project_id in your request.","status_code":403}`.
-  With a wrong token: `"Invalid project token."`
-- **Crash before anything runs** when a config leaves the node WebSocket URL as a
-  placeholder (e.g. `nodeWS: 'none'`): the wallet builder calls `new URL(nodeWS)` for its
-  relay and submission service and throws `TypeError: Invalid URL`. (Found by reading the
-  code; the placeholder was fixed before it ran.)
-- **Wallet sync never finishes after switching indexers.** The wallet restores, shielded
-  and unshielded sync to complete, but dust sticks at the same `appliedIndex` and the SDK
-  logs this on every retry:
+### Not this runbook
 
-  ```
-  Wallet.Other: Error while applying sync update
-  [cause]: Error: values inserted non-linearly into dust generation tree; expected to insert index 399177, but received 399179.
-      at DustLocalState.replayEventsWithChanges (…/@midnight-ntwrk/ledger-v8/midnight_ledger_wasm_bg.js)
-  ```
-
-  Nothing moves forward. CPU and memory keep ticking up, which looks like progress, until the
-  app's sync timeout fires. Seen when restoring a fast-sync/preseed bundle cut against the
-  official indexer and then syncing it from Blockfrost. The same applies to any saved wallet
-  state (`serializeState()` output) carried across indexers. The exact indices in the
-  message vary with the cursor.
-- **"Wallet sync timeout" right after funding.** The wallet synced, the faucet NIGHT arrived
-  and the balance shows it, but a follow-up sync check then times out. In `midnight-examples`
-  it came from `@midnight-ntwrk/testkit-js` `waitForFunds`, which calls `syncWallet` with a
-  fixed 90 s timeout:
-
-  ```
-  Wallet synced state emission (synced=false): { shielded=true, unshielded=false, dust=false }
-  Error: Wallet sync timeout after 90000ms
-   ❯ …/@midnight-ntwrk/testkit-js/src/wallet/wallet-utils.ts:87:40
-  ```
-
-  `unshielded=false` stays put for minutes after the transaction lands. The same code
-  passes against the official preprod indexer.
-
-Also seen on Blockfrost, and harmless: WebSocket subscriptions drop every few minutes.
-Each sub-wallet logs one `Wallet.Sync: [object Object]` (`_tag: 'Wallet.Sync'`) to stderr,
-then resubscribes from its cursor with exponential backoff (1 s doubling, capped at 2 min)
-and carries on. In a 67-minute sync this happened three times: once each for the
-unshielded, shielded and dust subscriptions, including the dust one mid-stream. Every
-resume was clean. No action is needed unless the error repeats without progress. How
-often it happens varies. On 2026-09-30 the drops tracked CPU load in the process, not idle
-time:
-- A 67-minute genesis cut logged no drops. Neither did any single-wallet suite (6–8 min
-  each).
-- Multi-wallet suites logged 3 drops (one per sub-wallet, `Wallet.Sync: [object CloseEvent]`)
-  each time another wallet was restored from a preseed bundle while an earlier wallet was
-  live: battleship 3, silent-auction 6, shielded-chips 9, private-party 9–12.
-
-The inferred cause (unconfirmed) is that `dust.restore()` deserializes ~12.7 MB in WASM on
-the same thread, the event loop stalls for about 2 min, and the live wallet's sockets are
-closed.
-
-Seen once on 2026-09-30, possibly related: the **first transaction right after such a
-restore** was rejected with `1010: Invalid Transaction: Custom error: 170`
-(`InvalidDustSpendProof`). A second transaction from the same wallet 28 s later passed, and
-the suite passed on re-run. Inferred, not confirmed: the earlier wallet's dust tree lagged
-tip after the stall, so its fee proof used a stale root. Re-sync a wallet after restoring
-others in the same process, before it transacts.
+- **The same `values inserted non-linearly` error when the wallet first synced on the indexer you are on now.** See the [cursor-mismatch runbook](../wallet-sync-cursor-indexer-mismatch-runbook/wallet-sync-cursor-indexer-mismatch-runbook.md), which owns the mechanism.
+- **`1010: Invalid Transaction: Custom error: N`.** See the [1010 runbook](../node-1010-custom-error-runbook/node-1010-custom-error-runbook.md).
+- **A sync timeout where an explorer does not show the funds on chain.** Not covered: open an issue at the front door under Stop and escalate.
+- **A network the docs list as Midnight-hosted.** Nothing here applies. For `values inserted non-linearly` there, use the cursor-mismatch runbook above.
 
 ## Root cause
 
-**Ledger event ids are the indexer's own numbering, not chain data, and the two preprod
-indexers disagree.** Both serve byte-identical `dustLedgerEvents` / `zswapLedgerEvents`
-payloads for the same chain (the block hash at height 2684544 matches:
-`67b8fa44691e435ee2baf2b7d151e788b6bd6288ccaf937dadee7f640eaf1419`). But:
+1. **A wallet resumes sync from an id the indexer assigned, not from a chain position.** State saved against one indexer therefore points at the wrong events on another. This is sourced for the dust wallet. For the shielded and unshielded streams it was measured.
+2. **For the unshielded wallet, "synced" means it has caught up with the indexer's latest progress message, and that message is sent less often on an idle subscription.** A short fixed wait right after a transaction expires first. Measured: the Midnight-hosted indexer did not slow down, and Blockfrost does. Not tested: which indexer release each ran.
 
-| Id range (official numbering) | Official indexer | Blockfrost |
-|---|---|---|
-| ≤ 989780 | contiguous | same ids, same payloads |
-| 989781–989802 | no dust or zswap event uses these ids | numbers straight through |
-| ≥ 989803 → tip | id N | **id N − 22**, same payload |
+## Before you start
 
-At compile time the offset was a constant −22 from 989781 to the tip (`maxId` 1575271
-official vs 1575249 Blockfrost). The gap sits between blocks 1130986 (last id 989780) and
-1130996 (first id 989803 official, 989781 Blockfrost); the blocks between carry no dust or
-zswap events on either indexer, and every block hash matches. Why the official indexer skips
-those 22 ids is unconfirmed; tracked in `midnightntwrk/servicedesk#216`. The leading
-explanation comes from `midnight-wallet#781`. Preprod checkpoints saved before ~2026-09-22
-are off by exactly 22 against today's official indexer. So the hole most likely appeared
-when the official indexer was re-synced, and before that its numbering matched Blockfrost's.
-The indexer team has not confirmed this.
-
-Wallet sync resumes each ledger-event subscription from a stored event id
-(`dustLedgerEvents(id: $id)`, `zswapLedgerEvents(id: $id)` in
-`@midnight-ntwrk/wallet-sdk-indexer-client`). A cursor taken on the official indexer points
-22 events further along on Blockfrost. The dust wallet then replays the wrong events into
-its generation tree, `DustLocalState.replayEventsWithChanges` rejects the out-of-order
-insert, and the sync layer retries the same batch forever. Shielded sync can reach
-`isStrictlyComplete()` from the same shifted cursor for an empty wallet. That shows only
-that no tree insert collided, not that the state is correct, so do not rely on it.
-
-The mechanism isn't specific to Blockfrost. Any change of the database behind a wallet
-(another provider, a re-sync of the same endpoint, blue/green) can break a saved cursor. The
-general mechanism, the timestamp-error variant and the remediations are in the
-[cursor-mismatch runbook](../wallet-sync-cursor-indexer-mismatch-runbook/wallet-sync-cursor-indexer-mismatch-runbook.md).
-This section keeps the offsets measured between the official indexer and Blockfrost.
-
-**Transaction ids are indexer numbering too.** The same funding transaction
-(`c9a01ee7…fd849706`, block 2770188) is id 632821 on the official indexer and 632791 on
-Blockfrost, an offset of −30. This was measured on that one transaction; where the offset
-starts has not been bisected. The unshielded wallet resumes its
-`unshieldedTransactions(address, transactionId)` subscription from its last applied
-transaction id. So saved unshielded state is also bound to its indexer, just like the ledger
-event cursors above.
-
-**Unshielded "synced" waits on the indexer's next progress poll.** The unshielded wallet
-counts as synced (`isStrictlyComplete()`) only when its applied transaction id equals the
-indexer's latest `UnshieldedTransactionsProgress.highestTransactionId`, and it must be
-connected (`@midnight-ntwrk/wallet-sdk-unshielded-wallet` `SyncProgress.js`). A new
-transaction moves the applied id at once. The highest id moves only when the indexer
-next sends a progress message, which it does on a timer, not on each new transaction.
-
-The current indexer (`midnight-indexer` `indexer-api/src/infra/api/v4/subscription/unshielded.rs`,
-`polling.rs`) polls at `progress_update_interval` (30 s by default). While nothing changes it
-backs off up to 8× (about 4 min), with ±20% jitter. Holding one subscription open for 3 min
-on each preprod indexer:
-
-| | Progress messages after the first |
-|---|---|
-| Official indexer | every 30 s, flat |
-| Blockfrost | after 35 s, then 55 s, then none in the last 60 s |
-
-The inference is that Blockfrost runs a newer indexer with the idle backoff and the official
-preprod endpoint runs an older one without it (not confirmed with either operator). A wallet
-that has been idle for a while gets a transaction, and the next progress message can be up
-to ~4.8 min away. Any check that waits less than that for `isStrictlyComplete()` fails. By
-the same code, shielded progress (`shielded.rs`) should behave alike; that is untested.
-
-The first two symptoms are plain configuration: Blockfrost needs its project token on every
-request, and the SDK needs a real `wss://` node URL.
-
-## Key identifiers
-
-- **Endpoints (preprod).** Verified with a real token on 2026-09-29.
-
-  | Service | Official (shut down 2026-10-09) | Blockfrost (new) |
-  |---|---|---|
-  | Indexer HTTP (GraphQL) | `https://indexer.preprod.midnight.network/api/v4/graphql` | `https://midnight-preprod.blockfrost.io/api/v0` (`/api/v4/graphql` on the same host also answers; `/api/v0/graphql` is 404) |
-  | Indexer WS | `wss://indexer.preprod.midnight.network/api/v4/graphql/ws` | `wss://midnight-preprod.blockfrost.io/api/v0/ws` (`graphql-transport-ws`) |
-  | Node RPC HTTP | `https://rpc.preprod.midnight.network` | `https://rpc.midnight-preprod.blockfrost.io` |
-  | Node RPC WS | `wss://rpc.preprod.midnight.network` | `wss://rpc.midnight-preprod.blockfrost.io` (`/ws` also answers) |
-  | Proof server | local `:6300` | unchanged, not a Blockfrost service |
-
-- **Auth.** Blockfrost accepts the token as a `project_id` header **or** a
-  `?project_id=<token>` query parameter; a path segment is not recognised. Use the query
-  parameter. The SDK clients (`indexerPublicDataProvider`, the wallet SDK indexer client,
-  polkadot `WsProvider`) take plain URLs with no header hook, and browser WebSockets cannot
-  set headers.
-- **CORS.** Blockfrost answers preflight with `access-control-allow-origin: *`,
-  `access-control-allow-methods: GET,HEAD,POST`, and any header.
-- **GraphQL schema.** Blockfrost has every official field plus extras. The one difference in
-  a shared field: `Subscription.dustGenerations` is
-  `(dustAddress: DustAddress!, startIndex: Int!, endIndex: Int!)` on the official indexer
-  and `(dustAddress: DustAddress!, blockHash: HexEncoded!, dtimeCutoffHeight: Int!)` on
-  Blockfrost. No `@midnight-ntwrk` package in the stack above references
-  `dustGenerations`. Blockfrost-only additions include contract-event queries
-  (`Query.contract`, `Query.contractEvents`, `Subscription.contractEvents`,
-  `Block.contractZswapState`, typed shielded/unshielded mint/burn/spend/receive events),
-  contract-maintenance types, and a bridge API (`bridgeEvents`, `bridgeBalance`,
-  `bridgeDeposits`, `bridgePoolSummary`, …). Code built only on the official schema needs
-  no change.
-- **Divergence point.** Ledger events: official ids 989781–989802, offset −22 thereafter
-  (at compile date). Transactions: −30 at official tx id 632821 (single sample).
-  Re-checked 2026-09-30 near tip (height ~2779585) with `check-indexer-cursor.mjs`: still
-  −22 for both streams (official zswap 1575204 = Blockfrost 1575182, dust 1575271 = 1575249;
-  zswap 1576386 = 1576364, dust 1576656 = 1576634).
-- **Error text.** `values inserted non-linearly into dust generation tree` (also seen as
-  `… into zswap commitment tree` / `… into dust commitment tree` for other cursor/tree
-  mismatches). For the progress lag: `Wallet sync timeout after 90000ms` from testkit
-  `syncWallet`, with `unshielded=false` in the emissions just before.
-- **Progress polling (current indexer).** `progress_update_interval` 30 s; idle backoff up to
-  8× (`IDLE_BACKOFF_MAX_MULTIPLE`); jitter 0.2 (`JITTER_FRACTION`); progress cache TTL 5 s
-  (from `midnight-indexer` `qa/tests/tests/e2e/subscription-polling.test.ts`).
-- **Full genesis sync on Blockfrost preprod:** 67 min 21 s (2026-09-29, wallet SDK 1.2.0,
-  ~1.575M dust events at ~390 events/s; shielded and unshielded finish in the first minutes).
-  About the same as the official indexer's ~78 min. A second sample, the `midnight-examples`
-  preseed cut `--from-genesis` on 2026-09-30, took 67 min 6 s: dust 0 → 1,576,656 at
-  ~392 events/s (steady between 350 and 410), bundle height 2779435.
-- **Official preprod indexer outage.** `indexer.preprod.midnight.network` answered HTTP 503
-  (nginx `503 Service Temporarily Unavailable`) on 2026-09-30 at about 17:20 and 17:40 UTC,
-  and 200 again from 17:48 UTC. The official node RPC answered throughout. While the
-  official indexer is down, [Diagnose](#diagnose) step 2 can't compare cursors.
+- **Do the docs migration first.** This runbook assumes the new endpoints answer with your token, which the docs' check command shows.
+- **The token and the seed are secrets.** An agent working for a user never asks to see either. The user sets the token in their own environment. Strip the token from everything you paste or share.
+- **The Diagnose commands are read-only.** Creating or funding a wallet is always the user's step.
+- **Confirm the seed is held before any saved state is set aside.** Ask the user to confirm it, not to show it. If it is not held, leave the state where it is and Stop and escalate.
 
 ## Diagnose
 
-A Blockfrost token is required: every Blockfrost endpoint rejects anonymous calls. Keep the
-token in your environment, never on the command line or in a committed file.
+Go where the Symptom table sent you. With no clear symptom, run both steps.
 
-1. **Endpoints and auth** (should print a height, then `"Midnight Preprod"`):
-
-   ```sh
-   export BLOCKFROST_PROJECT_ID=<your preprod project token>
-   curl -s -X POST -H 'content-type: application/json' \
-     -d '{"query":"query { block { height hash } }"}' \
-     "https://midnight-preprod.blockfrost.io/api/v0?project_id=$BLOCKFROST_PROJECT_ID"
-   curl -s -X POST -H 'content-type: application/json' \
-     -d '{"jsonrpc":"2.0","id":1,"method":"system_chain","params":[]}' \
-     "https://rpc.midnight-preprod.blockfrost.io?project_id=$BLOCKFROST_PROJECT_ID"
-   ```
-
-2. **Is the stored cursor portable?** Run
-   [`scripts/check-indexer-cursor.mjs`](scripts/check-indexer-cursor.mjs) (Node ≥ 22, no
-   `npm install`, read-only). It probes the target endpoints, checks both indexers are on the
-   same chain, then fetches the event at your cursor from both and compares payloads. When
-   they differ, it finds the same payload on the target and reports the id offset. It needs
-   both indexers live. The default A (`indexer.preprod.midnight.network`) stops answering at
-   22:00 UTC on 2026-10-09, so from then on rely on the manifest host (`== 0. Manifest`,
-   below) and the stall symptom in [Symptom](#symptom).
+1. **Is anything still pointing at the old hosts?**
 
    ```sh
-   # A cursor you already have (e.g. the stuck appliedIndex from the sync log):
-   node check-indexer-cursor.mjs --id 1557519
-   # A fast-sync / preseed bundle's cursors, read from its manifest:
-   node check-indexer-cursor.mjs --manifest preseed/preprod/manifest.json
+   grep -rnoE "(indexer|rpc)\.(preprod|mainnet)\.midnight\.network" --exclude-dir=node_modules --exclude-dir=.git .
    ```
 
-   Output for a bundle cut against the official indexer, checked against Blockfrost:
+   It prints only the file, line number and host, so no secret on that line is shown. A hit in code or config is a consumer that has not moved: fix it with the docs guide. Hits in comments and prose do not count. Move RPC URLs too, even if the old ones still answer. It cannot see CI secrets, a deployed environment, or defaults inside a dependency: check those by hand, and set a CI secret again instead of printing it.
 
-   ```
-   == 3. Cursor portability
-     dust @ 1557519: NOT PORTABLE (A's first event is id 1557519, B's is id 1557519, payloads differ)
-       same payload found on B at id 1557497: offset -22 (B id = A id - 22)
-   ```
+2. **Does the wallet resume from state saved on another indexer?** Search your code for `serializeState` and `restore` to find where state is written and read. Also look for a fast-sync or preseed bundle, or stored event or transaction ids.
+   - Nothing is saved, because the wallet syncs from genesis on every start: this cause is ruled out. If sync still fails, Stop and escalate.
+   - A bundle whose manifest has an `indexer` field: `grep -oE '"indexer": *"([a-z]+://)?[A-Za-z0-9.-]+' <manifest.json>` prints its host and nothing after it. A host other than the one in your indexer URL means not portable. The same host: see the last bullet.
+   - State or ids from a wallet that first synced on another indexer, even if the file was rewritten since (inferred), a manifest with no `indexer` field, or no way to tell: treat it as not portable.
+   - State from a wallet that synced from genesis on the indexer you use now: portable. With no error, there is nothing to do. With the error, see the first case under Not this runbook.
 
-   Exit code `2` means not portable: the symptom above is this root cause. Exit `0`
-   (`PORTABLE`) means the cursor is fine and the stall is something else. Exit `1` means the
-   check itself failed; read its output. Defaults compare the official preprod indexer (A)
-   to Blockfrost preprod (B); `--a-http --a-ws --b-http --b-ws --b-rpc` override them.
-
-   The check assumes the cursor came from A. For a bundle cut against Blockfrost it still
-   reports `NOT PORTABLE` with the −22 offset, which is correct: that bundle doesn't restore
-   on the official indexer either.
-
-   **Which indexer was a bundle cut against?** With `--manifest`, the script first prints the
-   indexer host the manifest records (`== 0. Manifest`). `midnight-examples` cutters write it
-   from 2026-09-30 (`"indexer": "midnight-preprod.blockfrost.io"`). This needs no query to A,
-   so it still works when the official indexer is down. For an older manifest with no
-   `indexer` field, steps 2–3 need A to be reachable. If A is down, compare the manifest's
-   cursors with the `maxId`s recorded in [Key identifiers](#key-identifiers). The
-   `midnight-examples` bundle at height 2768501 had dust cursor 1575271, which is the official
-   `maxId`; Blockfrost's was 1575249. That identified it as an official-indexer bundle, and
-   the script confirmed it once A was back.
+   Not portable: do Remediation 1 for every wallet that resumes from that state, including one that appears to sync (inferred: it can have skipped events). If you use bundles, also do Remediation 2 so new wallets get a good one.
 
 ## Remediation
 
-Most practical first. No funds are at risk in any of these: a stuck sync never submits
-anything.
+1. **Set aside state and stored ids saved against the old indexer, and sync from genesis.** What the docs leave out:
+   - With the seed confirmed held, stop the app, then move the old state aside instead of deleting it, until the genesis sync has finished and the wallet shows the balance you expect. Then delete it.
+   - Raise two timeouts above the full-sync time the docs give: the app's own whole-sync timeout, and the test runner's hook timeout if tests do the sync.
 
-1. **Do the config migration properly.**
-   - Swap all four URLs.
-   - Append `?project_id=<token>` to each, read from an env var (e.g.
-     `BLOCKFROST_PROJECT_ID` in a gitignored `.env.<network>`).
-   - Leave no placeholder `nodeWS`.
-   - Build the config when it's used, not at import time, and fail fast with a clear
-     message when the token is missing.
-   - **Every URL now carries the token.** Any log line or error message that prints
-     `config.indexer` (or another endpoint) leaks it. `midnight-examples` had two ("Could
-     not read the chain tip from ${config.indexer}") and now passes URLs through
-     `redactUrl()`, which replaces `project_id=` values with `<redacted>`. Search the code
-     for URLs that get interpolated into logs or errors.
-   - Scripts that run outside the test runner don't load `.env.<network>` by themselves.
-     Plain `node`, `vite-node` and `tsx` don't; vitest loads it in `midnight-examples` only
-     through `loadEnv` in `vitest.config.ts`. Load the file into the environment first
-     (`set -a; . ./.env.preprod; set +a`) without printing it. Tools that rewrite the env
-     file drop the token: `midnight-examples` `yarn wallets:new --force` writes the file
-     from scratch, so re-add `BLOCKFROST_PROJECT_ID` afterwards.
+   *Trade-off:* the app is down for a long first sync.
 
-   The shape used in `midnight-examples`:
+2. **Cut fast-sync and preseed bundles again, from genesis, against the indexer you use now.** By Root cause 1, a bundle's cursors are valid only on the indexer that produced them. Bootstrapping the cutter from an old bundle fails the same way (measured). Record the indexer host, not the URL, in the manifest, so Diagnose 2 works next time. The `midnight-examples` cutter does, and its `FAST-SYNC.md` is the reference.
 
-   ```ts
-   function withBlockfrostKey(url: string, projectId: string): string {
-     return `${url}${url.includes('?') ? '&' : '?'}project_id=${encodeURIComponent(projectId)}`;
-   }
-   export function preprodConfig(): NetworkConfig {
-     const projectId = process.env['BLOCKFROST_PROJECT_ID']?.trim();
-     if (!projectId) throw new Error('BLOCKFROST_PROJECT_ID is not set.');
-     return {
-       networkId: 'preprod',
-       indexer:   withBlockfrostKey('https://midnight-preprod.blockfrost.io/api/v0', projectId),
-       indexerWS: withBlockfrostKey('wss://midnight-preprod.blockfrost.io/api/v0/ws', projectId),
-       node:      withBlockfrostKey('https://rpc.midnight-preprod.blockfrost.io', projectId),
-       nodeWS:    withBlockfrostKey('wss://rpc.midnight-preprod.blockfrost.io', projectId),
-       proofServer: process.env['MIDNIGHT_PROOF_SERVER'] ?? 'http://127.0.0.1:6300',
-     };
-   }
+   *Trade-off:* that cutter seeds only wallets whose birthday is at or after the bundle's height. An older wallet needs Remediation 1 instead. Do not abandon a funded wallet for a new one.
+
+3. **Replace a funding wait you cannot configure.** The docs say what to wait for, but not that `waitForFunds` in testkit-js takes no timeout. Check your version:
+
+   ```sh
+   grep -nE "syncWallet = |waitForFunds = |syncWallet\(wallet" node_modules/@midnight-ntwrk/testkit-js/dist/index.mjs
    ```
 
-   Move **every** consumer at once: app config, test harnesses, scaffold templates, and
-   scripts that cut preseed bundles or mint wallets. A half-migrated repo mints cursors on
-   one indexer and replays them on the other. Here is what that looked like in
-   `midnight-examples` (2026-09-30):
-   - hello-world had moved to Blockfrost.
-   - The other nine suites, the scaffold template, the preseed cutter and the wallet minter
-     (`packages/fast-sync/src/config.ts`) were still on the official indexer.
-   - The minter also reads each wallet's birthday tip from its configured indexer.
-   - The bundle committed alongside the hello-world move was an official-indexer bundle.
-     No Blockfrost wallet could have seeded from it.
+   It prints the `syncWallet =` line with its default, the `waitForFunds =` line, and each `syncWallet(wallet` call.
+   - The calls after `waitForFunds =` pass no timeout: the wait is fixed at that default. Use your own helper that waits for what the docs name, with a limit above the progress interval they give. `packages/fast-sync/src/funding.ts` in `midnight-examples` is one.
+   - Anything else, such as calling `syncWallet` yourself or not using testkit-js: raise your own wait above that interval.
 
-   The fix was one shared `preprodConfig()` in the harness package, which every consumer
-   imports.
+   *Trade-off:* you own a small funding helper.
 
-2. **Re-sync wallets from genesis on the new indexer.** Discard saved wallet state from the
-   old indexer. Do **not** migrate `serializeState()` output. A fresh wallet created against
-   the new indexer, or an existing seed restored with a full sync, is correct by
-   construction. The cost is the full sync time, dominated by dust: 67 min on Blockfrost
-   preprod, ~78 min on the official indexer. Check the app's sync timeout covers that. In
-   `midnight-examples`, `syncWallet`'s `Rx.timeout({ each })` sits after the "is complete"
-   filter, so it caps the **whole** sync, not the gap between progress updates. Its 60 min
-   default failed at 89% dust (raise it with `MIDNIGHT_SYNC_TIMEOUT_MS`). Test runners need
-   the same headroom in their hook timeouts (vitest `--hookTimeout`).
+4. **Do not shift cursors by a fixed offset or by one derived from the numbers in the error.** If you cannot afford a genesis sync, the re-anchoring approach and its risks are in the [cursor-mismatch runbook](../wallet-sync-cursor-indexer-mismatch-runbook/wallet-sync-cursor-indexer-mismatch-runbook.md#remediation).
 
-3. **Cut a fast-sync / preseed bundle against the target indexer.** A bundle's cursors are
-   only valid on the indexer that produced them. Cut with the cutter pointed at Blockfrost
-   and **from genesis** (in `midnight-examples`: `yarn preseed:cut --from-genesis`).
-   Bootstrapping the cutter from an official-indexer bundle fails with the same error.
-   Keep one bundle per indexer and record the indexer in the manifest. Record the **host**,
-   not the URL, because the URL carries the token. `midnight-examples` writes
-   `"indexer": "<host>"` from `cut-preseed.ts`, and `loadReferenceBundle` ignores the extra
-   field. Wallet birthday rules still apply: re-cutting means re-minting and re-funding
-   wallets whose birthday predates the new bundle. Measured 2026-09-30: the Blockfrost cut
-   took 67 min 6 s. Four wallets minted 5 blocks later (birthday 2779440 vs bundle 2779435)
-   seeded from it: the first sync emission started at the bundle cursor, and the wallet was
-   synced about 105 s after it started, mostly `restore()` of the ~12.7 MB dust state.
+## Confirm fixed
 
-4. **Pin cursor-bearing consumers to one indexer (interim).** If only part of the stack can
-   move, keep wallet sync on the indexer its cursors came from. Reads keyed by contract
-   address, block height or block hash, and tx submission over RPC, carry no ledger-event
-   cursor and can use Blockfrost.
+Check each line that applies, and report any you could not check.
 
-5. **Don't gate on a short strict-sync check after a transaction.** On Blockfrost (and on
-   any indexer with idle progress backoff), `isStrictlyComplete()` for unshielded can stay
-   false for up to ~4.8 min after a transaction. Wait for what you actually need instead:
-   - after a faucet transfer, the NIGHT balance;
-   - before a transaction that pays fees, spendable DUST (`state.dust.availableCoins`);
-   - otherwise `isCompleteWithin(n)`, or a timeout well over 5 min.
+- Diagnose 1 shows no hit in code or config.
+- The token check from the docs prints a block height and the right network name, for each network you use.
+- The wallet reaches a synced state and `values inserted non-linearly` does not appear again.
+- The funding step completes without `Wallet sync timeout`, and `state.dust.availableCoins` is not empty.
+- `grep -cE "night(preprod|mainnet)[A-Za-z0-9]" <logfile>` prints 0. Those are the docs' token prefixes, and counting keeps a token off your screen. If it is not 0, treat the token as leaked: replace it, and stop logging the value.
 
-   testkit's `waitForFunds` can't be configured (its `syncWallet` is fixed at 90 s).
-   `midnight-examples` replaced it in `packages/fast-sync/src/funding.ts`. It registers
-   unregistered NIGHT UTXOs with `wallet.registerNightUtxosForDustGeneration` →
-   `finalizeRecipe` → `submitTransaction` (the same calls testkit makes), then waits for a
-   spendable DUST coin. Verified 2026-09-30: on Blockfrost preprod the registration was
-   submitted 2 s after sync completed and DUST was spendable 14 s later. The hello-world
-   suite then passed (deploy and `storeMessage`), where the testkit path had timed out.
+## Stop and escalate
 
-6. **Not recommended: shift cursors by the offset.** Subtracting 22 from every stored event
-   id (or 30 from transaction ids) lines them up today. But the offsets come from the
-   indexers numbering differently, and any future skip on either side silently changes
-   them. Treat cursors as bound to their indexer. A re-anchoring approach that checks each
-   candidate event against the saved state, with its caveats, is in the
-   [cursor-mismatch runbook](../wallet-sync-cursor-indexer-mismatch-runbook/wallet-sync-cursor-indexer-mismatch-runbook.md#remediation).
+Open an issue at the [servicedesk front door](https://github.com/midnightntwrk/servicedesk/issues/new/choose) when:
 
-**Browser DApps.** With the connector API, endpoints come from the user's wallet
-(`getConfiguration()` → `indexerUri`, `indexerWsUri`, `substrateNodeUri`), not from DApp
-code. Whether Lace accepts a custom Blockfrost URL with a `project_id` query was not tested.
-A token placed in browser-side URLs is visible to anyone who loads the page; use a
-server-side proxy or a token scoped for public use.
+- An error the docs guide covers survives the fix it gives, with Diagnose 1 clean.
+- The token check from the docs fails with something the docs do not list, such as a 429 or a 5xx.
+- Sync fails with `values inserted non-linearly` although no saved state is involved, including during a genesis sync on the new indexer.
+- `Wallet sync timeout` survives Remediation 3, or the `Wallet.Sync` drops repeat and sync makes no progress.
+- The seed is not held, or the balance is wrong after a genesis sync. Leave the saved state where it is, and do not put old state back.
+- A source in Key identifiers disagrees with its row and no step covers that. Say which row.
+
+Include the error text, the token check's output, and `npm ls @midnight-ntwrk/wallet-sdk-dust-wallet @midnight-ntwrk/wallet-sdk-unshielded-wallet @midnight-ntwrk/testkit-js`. Remove any token from all of it first.
+
+## Key identifiers
+
+Each row names a public source and text it must contain: a repo file (`github:`), a published package file (`npm:`), or an issue's state (`issue:`). [check-runbook.mjs](../authoring/check-runbook.mjs) tests every row daily against each source's newest version. For your installed version, look under `node_modules/<package>/<path>`. If a source disagrees with a row, the source is right.
+
+| Fact this runbook relies on | Source of truth | Must contain |
+|---|---|---|
+| The docs give the endpoints, the token setup and its check, token hygiene for logs, each error's first fix, the funding wait, the progress interval and the full-sync time | `github:midnightntwrk/midnight-docs/docs/guides/networks-and-environments.mdx`, published as [Networks and environments](https://docs.midnight.network/guides/networks-and-environments) | `{#migrating-from-the-midnight-hosted-mainnet-endpoints}` `indexer.preprod.midnight.network` `rpc.preprod.midnight.network` `indexer.mainnet.midnight.network` `rpc.mainnet.midnight.network` `nightpreprod` `nightmainnet` `value from URLs and errors before you log them` `Missing project token` `Invalid project token` `TypeError: Invalid URL` `values inserted non-linearly` `transaction ids differ between indexers` `takes over an hour` `Wallet sync timeout` `backing off to about 4 minutes` `or for spendable DUST` |
+| Event ids are database row ids that each indexer assigns | `github:midnightntwrk/midnight-indexer/indexer-common/migrations/postgres/001_initial.sql` | `CREATE TABLE ledger_events (` `id BIGSERIAL PRIMARY KEY` |
+| The dust wallet saves its last applied event id | `npm:@midnight-ntwrk/wallet-sdk-dust-wallet/dist/v1/Serialization.js` | `offset: w.progress?.appliedIndex` |
+| The dust wallet resumes sync from that saved id | `npm:@midnight-ntwrk/wallet-sdk-dust-wallet/dist/v1/Sync.js` | `const { appliedIndex } = state.progress;` |
+| Unshielded "synced" compares the applied id with the indexer's latest progress | `npm:@midnight-ntwrk/wallet-sdk-unshielded-wallet/dist/v1/SyncProgress.js` | `isStrictlyComplete()` `return SyncProgress.isCompleteWithin(this, 0n)` |
+| Progress messages back off on an idle subscription | `github:midnightntwrk/midnight-indexer/indexer-api/src/infra/api/v4/subscription/polling.rs` | `IDLE_BACKOFF_MAX_MULTIPLE` |
+| The indexer's config sets the progress interval | `github:midnightntwrk/midnight-indexer/indexer-api/config.yaml` | `progress_update_interval` |
+| `waitForFunds` takes no timeout and uses the `syncWallet` default of 90 s | `npm:@midnight-ntwrk/testkit-js/dist/index.mjs` | `const waitForFunds = async (wallet, env, fundFromFaucet = false, unshieldedKeystore) =>` `await syncWallet(wallet);` `timeout = 90_000)` |
+| The `midnight-examples` cutter writes the indexer host into the manifest | `github:midnightntwrk/midnight-examples/packages/fast-sync/scripts/cut-preseed.ts` | `const indexer = new URL(config.indexer).host;` |
+| That cutter seeds only wallets whose birthday is at or after the bundle height | `github:midnightntwrk/midnight-examples/FAST-SYNC.md` | `seeds a wallet whose birthday is at or after the reference height` |
+| `midnight-examples` has a funding helper that waits for spendable DUST | `github:midnightntwrk/midnight-examples/packages/fast-sync/src/funding.ts` | `registerNightUtxosForDustGeneration` `availableCoins.length >= minCoins` |
+| Spendable DUST is `availableCoins` on the dust wallet, whose state is saved with `serializeState` and read with `restore` | `npm:@midnight-ntwrk/wallet-sdk-dust-wallet/dist/DustWallet.d.ts` | `get availableCoins()` `serializeState(): Promise<TSerialized>` `restore(serializedState: TSerialized)` |
+| A wallet cursor that survives renumbering has not shipped | `issue:midnightntwrk/midnight-wallet#781` | `open` |
+| Ids that are stable across indexer deployments have not shipped | `issue:midnightntwrk/midnight-indexer#1460` | `open` |
 
 ## Reference material
 
-- Worked case: preprod migration of `midnightntwrk/midnight-examples`, first hello-world
-  (2026-09-29), then every suite plus the preseed cutter and wallet minter (2026-09-30).
-  On Blockfrost, against preprod node `1.0.400-c338b9ac`, 9 of 10 suites passed. The tenth
-  failed one assertion that doesn't depend on the indexer (202 passed, 1 skipped, 1
-  failed); details are in that repo's `reports/node-1.0.400-regression.json`. The shared
-  config is in `packages/fast-sync/src/config.ts`. Upstream tracking for the id gap:
-  `midnightntwrk/servicedesk#216`; for the SDK cursor design:
-  `midnightntwrk/midnight-wallet#781`. Relevant files in that repo:
-  `packages/fast-sync/src/config.ts` (the shared migrated config: `preprodConfig()`,
-  `redactUrl()`);
-  `packages/fast-sync/src/funding.ts` (funding gate without testkit `waitForFunds`);
-  `packages/fast-sync/src/fast-wallet.ts` (`new URL(env.nodeWS)` for relay and submission;
-  seeds sub-wallets from a reference bundle); `packages/fast-sync/scripts/cut-preseed.ts`
-  (`--from-genesis`); `FAST-SYNC.md` ("When a bundle goes bad").
-- SDK: `@midnight-ntwrk/wallet-sdk-indexer-client` `DustLedgerEvents` / `ZswapLedgerEvents`
-  subscriptions (`dustLedgerEvents(id: $id) { id raw maxId }`);
-  `@midnight-ntwrk/wallet-sdk-dust-wallet` `dist/v1/Sync.js` (resume by `id`);
-  `@midnight-ntwrk/ledger-v8` `DustLocalState.replayEventsWithChanges` (the throw site).
-  Unshielded: `@midnight-ntwrk/wallet-sdk-indexer-client` `UnshieldedTransactions`
-  (`unshieldedTransactions(address, transactionId)`, yields `UnshieldedTransaction` or
-  `UnshieldedTransactionsProgress { highestTransactionId }`);
-  `@midnight-ntwrk/wallet-sdk-unshielded-wallet` `dist/v1/SyncProgress.js`
-  (`isStrictlyComplete` = connected and applied id == highest id) and `dist/v1/Sync.js`;
-  `@midnight-ntwrk/testkit-js` 4.1.1 `syncWallet` / `waitForFunds` (fixed 90 s).
-- Indexer: `midnightntwrk/midnight-indexer`
-  `indexer-api/src/infra/api/v4/subscription/unshielded.rs` (`progress_updates`),
-  `…/subscription/polling.rs` (`next_poll_interval`), `indexer-api/config.yaml`
-  (`progress_update_interval: "30s"`).
-- Official endpoints: <https://docs.midnight.network/guides/networks-and-environments>.
-- Open questions to settle before relying on this long-term:
-  - Why the official preprod indexer skips ids 989781–989802, and whether more skips should
-    be expected (indexer team; `servicedesk#216`). `midnight-wallet#781` points to a re-sync
-    around 2026-09-22 on preprod, and to renumbering on mainnet (offset 13 since ~09-19, 37
-    for a 09-01 checkpoint).
-  - Blockfrost request quotas for a full genesis sync (preprod event ids run to ~1.58M).
-    On 2026-09-30 no request was rate-limited (no 429s) in a 67-min genesis cut plus
-    ~2 h 10 min of test suites (26 fast-synced wallet builds, every suite's transactions
-    submitted over Blockfrost RPC to node 1.0.400). The plan's limits weren't checked.
-  - Lace support for custom Blockfrost endpoints.
-  - Which indexer versions Blockfrost and the official preprod endpoint run. The progress
-    backoff is inferred from observed message timing, and once the official endpoint
-    upgrades, apps hit the same funding-time failure there.
-  - Where the −30 transaction-id offset starts, and whether it is constant.
-  - Whether Blockfrost drops WebSocket subscriptions deliberately (idle timeout or
-    connection lifetime) or intermittently. The 2026-09-30 run points to client-side CPU
-    stalls instead (see [Symptom](#symptom)); not confirmed with Blockfrost.
+- **Measurements:** claims marked measured were observed once, in the preprod move of `midnightntwrk/midnight-examples`. The numbers are in [this runbook as first written](https://github.com/midnightntwrk/servicedesk/blob/9c63c992a37a6f96ccc2a7f7c40f36cd3c04e03b/runbooks/indexer-blockfrost-migration-runbook/indexer-blockfrost-migration-runbook.md) and `midnightntwrk/servicedesk#216`.
+- **Script:** [scripts/check-indexer-cursor.mjs](scripts/check-indexer-cursor.mjs) compares one cursor on two live indexers. No step uses it.
