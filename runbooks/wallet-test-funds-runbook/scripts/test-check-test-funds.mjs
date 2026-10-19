@@ -1,11 +1,15 @@
 #!/usr/bin/env node
 /**
- * test-check-test-funds.mjs: offline test of check-test-funds.mjs's address check.
+ * test-check-test-funds.mjs: offline test of check-test-funds.mjs's address check and DUST verdict.
  *
  * The address check decides which branch of the runbook a reader takes, so a wrong "ok" sends them
- * after the wrong cause. Each case runs the script as a reader would and checks the first line it
- * prints and its exit code. Accepted addresses run with --offline, and every other case stops before
- * any request, so no case needs the network or a token.
+ * after the wrong cause. Each address case runs the script as a reader would and checks the first
+ * line it prints and its exit code. Accepted addresses run with --offline, and every other case stops
+ * before any request.
+ *
+ * The DUST verdict cases feed fundsReport a real indexer answer, recorded on Preview in
+ * test-check-test-funds.history.json, or a copy changed the way each failure would change it. So no
+ * case needs the network or a token.
  *
  * Requirements: Node >= 22. No npm install. It writes nothing.
  *
@@ -15,7 +19,8 @@
  */
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { readFileSync } from 'node:fs';
 
 if (typeof WebSocket !== 'function') { console.error(`Node >= 22 is required (this is ${process.version}).`); process.exit(1); }
 
@@ -57,5 +62,36 @@ for (const [name, args, want, exit, env] of CASES) {
   if (!ok) failed++;
   console.log(`${ok ? 'pass' : 'FAIL'}  ${name}${ok ? '' : `\n      expected exit ${exit} and "${want}…"\n      got exit ${r.status} and "${first}"`}`);
 }
-console.log(`\n${CASES.length - failed} of ${CASES.length} passed.`);
+const { fundsReport } = await import(pathToFileURL(SCRIPT).href);
+const { history } = JSON.parse(readFileSync(path.join(path.dirname(SCRIPT), 'test-check-test-funds.history.json'), 'utf8'));
+// Three unspent 5000 tNIGHT outputs, none registered.
+const FEW = 'mn_addr_preview1mrjdllf9muv893llnkmzakdw88apw9anv45wwfwjhcdcy0vwa6psxutlx5';
+// Nineteen outputs, one of them spent, the rest registered.
+const BUSY = 'mn_addr_preview1nfa4tz6u0a22zsp6n37xt39wjs7nhfjwscepl8xwhjvl76zkhgks0rqwje';
+const copy = (a) => structuredClone(history[a]);
+const register = (h, n) => { let left = n; for (const t of h) for (const u of t.createdUtxos) if (u.owner === FEW && left-- > 0) u.registeredForDustGeneration = true; return h; };
+const spendAll = (h) => [...h, { createdUtxos: [], spentUtxos: h.flatMap((t) => t.createdUtxos), transaction: { id: 0, block: { timestamp: 0 } } }];
+const otherToken = (h) => { h[0].createdUtxos[0].tokenType = 'ab'.repeat(32); return h; };
+
+// [name, history, address, a line that must be printed, exit code, optional check of all lines]
+const REPORTS = [
+  ['unregistered tNIGHT is a DUST finding', copy(FEW), FEW, 'DUST FINDING: 3 unspent UTXO(s), 15000 tNIGHT, are not registered', 2],
+  ['partly registered tNIGHT counts only the unregistered part', register(copy(FEW), 1), FEW, 'DUST FINDING: 2 unspent UTXO(s), 10000 tNIGHT, are not registered', 2],
+  ['fully registered tNIGHT is DUST ok', register(copy(FEW), 3), FEW, 'DUST ok: all unspent tNIGHT is registered', 0],
+  ['tNIGHT that was all spent is a DUST finding', spendAll(copy(FEW)), FEW, 'DUST FINDING: every tNIGHT UTXO here has been spent', 2],
+  ['a spent output is not counted as unspent', copy(BUSY), BUSY, 'TNIGHT unspent: 90000 tNIGHT in 18 UTXO(s), 18 registered for DUST', 0],
+  ['a long history lists the newest 10 and counts the rest', copy(BUSY), BUSY, 'TNIGHT 9 earlier tNIGHT output(s) not shown', 0, (lines) => lines.filter((l) => /^TNIGHT \d{4}-/.test(l)).length === 10],
+  ['outputs owned by another address are not counted', copy(FEW), BUSY, 'TNIGHT FINDING: no tNIGHT has ever reached this address on preview', 2],
+  ['a token other than NIGHT is not counted', otherToken(copy(FEW)), FEW, 'TNIGHT unspent: 10000 tNIGHT in 2 UTXO(s)', 2],
+  ['an empty history is a TNIGHT finding', [], FEW, 'TNIGHT FINDING: no tNIGHT has ever reached this address', 2],
+];
+for (const [name, h, address, want, exit, check = () => true] of REPORTS) {
+  const r = fundsReport(h, address, 'preview');
+  const ok = r.lines.some((l) => l.startsWith(want)) && r.code === exit && check(r.lines);
+  if (!ok) failed++;
+  console.log(`${ok ? 'pass' : 'FAIL'}  ${name}${ok ? '' : `\n      expected exit ${exit} and a line "${want}…"\n      got exit ${r.code} and\n      ${r.lines.join('\n      ')}`}`);
+}
+
+const total = CASES.length + REPORTS.length;
+console.log(`\n${total - failed} of ${total} passed.`);
 process.exit(failed ? 2 : 0);

@@ -1,0 +1,456 @@
+{
+ "source": "Preview indexer v4, unshieldedTransactions subscription, recorded 2026-10-19 by check-test-funds.mjs",
+ "history": {
+  "mn_addr_preview1mrjdllf9muv893llnkmzakdw88apw9anv45wwfwjhcdcy0vwa6psxutlx5": [
+   {
+    "__typename": "UnshieldedTransaction",
+    "createdUtxos": [
+     {
+      "owner": "mn_addr_preview1mrjdllf9muv893llnkmzakdw88apw9anv45wwfwjhcdcy0vwa6psxutlx5",
+      "tokenType": "0000000000000000000000000000000000000000000000000000000000000000",
+      "value": "5000000000",
+      "intentHash": "38e9387d414df9b8942a2b97339a62f3dce7f2925d60c5d06bda7b7cb3cc01a2",
+      "outputIndex": 0,
+      "registeredForDustGeneration": false
+     }
+    ],
+    "spentUtxos": [],
+    "transaction": {
+     "id": 73779,
+     "block": {
+      "timestamp": 1792187634000
+     }
+    }
+   },
+   {
+    "__typename": "UnshieldedTransaction",
+    "createdUtxos": [
+     {
+      "owner": "mn_addr_preview1mrjdllf9muv893llnkmzakdw88apw9anv45wwfwjhcdcy0vwa6psxutlx5",
+      "tokenType": "0000000000000000000000000000000000000000000000000000000000000000",
+      "value": "5000000000",
+      "intentHash": "905895f25a4fea79c2f3d342f25afa5b60356a0a541f2ed6e33269b5f567629a",
+      "outputIndex": 0,
+      "registeredForDustGeneration": false
+     }
+    ],
+    "spentUtxos": [],
+    "transaction": {
+     "id": 73780,
+     "block": {
+      "timestamp": 1792187760000
+     }
+    }
+   },
+   {
+    "__typename": "UnshieldedTransaction",
+    "createdUtxos": [
+     {
+      "owner": "mn_addr_preview1mrjdllf9muv893llnkmzakdw88apw9anv45wwfwjhcdcy0vwa6psxutlx5",
+      "tokenType": "0000000000000000000000000000000000000000000000000000000000000000",
+      "value": "5000000000",
+      "intentHash": "5226da28f37c7b2fb0c118673ae23c76f47fead13dfe2c3d5d02595d326ea5a6",
+      "outputIndex": 0,
+      "registeredForDustGeneration": false
+     }
+    ],
+    "spentUtxos": [],
+    "transaction": {
+     "id": 73784,
+     "block": {
+      "timestamp": 1792190034000
+     }
+    }
+   }
+  ],
+  "mn_addr_preview1nfa4tz6u0a22zsp6n37xt39wjs7nhfjwscepl8xwhjvl76zkhgks0rqwje": [
+   {
+    "__typename": "UnshieldedTransaction",
+    "createdUtxos": [
+     {
+      "owner": "mn_addr_preview1nfa4tz6u0a22zsp6n37xt39wjs7nhfjwscepl8xwhjvl76zkhgks0rqwje",
+      "tokenType": "0000000000000000000000000000000000000000000000000000000000000000",
+      "value": "5000000000",
+      "intentHash": "6eb5425a7d28a9574e742faf720f5a131dc2582b91629bd8db5406fb0b012e40",
+      "outputIndex": 0,
+      "registeredForDustGeneration": false
+     }
+    ],
+    "spentUtxos": [],
+    "transaction": {
+     "id": 49833,
+     "block": {
+      "timestamp": 1788473532001
+     }
+    }
+   },
+   {
+    "__typename": "UnshieldedTransaction",
+    "createdUtxos": [
+     {
+      "owner": "mn_addr_preview1nfa4tz6u0a22zsp6n37xt39wjs7nhfjwscepl8xwhjvl76zkhgks0rqwje",
+      "tokenType": "0000000000000000000000000000000000000000000000000000000000000000",
+      "value": "5000000000",
+      "intentHash": "cebe8beae5de2bdab5557154c5dcb12a478d4b3e493f61aeaf9fa31d969c6f05",
+      "outputIndex": 0,
+      "registeredForDustGeneration": true
+     }
+    ],
+    "spentUtxos": [
+     {
+      "owner": "mn_addr_preview1nfa4tz6u0a22zsp6n37xt39wjs7nhfjwscepl8xwhjvl76zkhgks0rqwje",
+      "tokenType": "0000000000000000000000000000000000000000000000000000000000000000",
+      "intentHash": "6eb5425a7d28a9574e742faf720f5a131dc2582b91629bd8db5406fb0b012e40",
+      "outputIndex": 0
+     }
+    ],
+    "transaction": {
+     "id": 49855,
+     "block": {
+      "timestamp": 1788474528000
+     }
+    }
+   },
+   {
+    "__typename": "UnshieldedTransaction",
+    "createdUtxos": [
+     {
+      "owner": "mn_addr_preview1nfa4tz6u0a22zsp6n37xt39wjs7nhfjwscepl8xwhjvl76zkhgks0rqwje",
+      "tokenType": "0000000000000000000000000000000000000000000000000000000000000000",
+      "value": "5000000000",
+      "intentHash": "9ce682f05f9f7105999046377bc9bbc937603edacdbca0b473d2160a6c041884",
+      "outputIndex": 0,
+      "registeredForDustGeneration": true
+     }
+    ],
+    "spentUtxos": [],
+    "transaction": {
+     "id": 51123,
+     "block": {
+      "timestamp": 1788548700000
+     }
+    }
+   },
+   {
+    "__typename": "UnshieldedTransaction",
+    "createdUtxos": [
+     {
+      "owner": "mn_addr_preview1nfa4tz6u0a22zsp6n37xt39wjs7nhfjwscepl8xwhjvl76zkhgks0rqwje",
+      "tokenType": "0000000000000000000000000000000000000000000000000000000000000000",
+      "value": "5000000000",
+      "intentHash": "c4ab90867edc4249051cc567c27500197af758fc08ef26d17878b5bb49d9ed29",
+      "outputIndex": 0,
+      "registeredForDustGeneration": true
+     }
+    ],
+    "spentUtxos": [],
+    "transaction": {
+     "id": 52314,
+     "block": {
+      "timestamp": 1788628236001
+     }
+    }
+   },
+   {
+    "__typename": "UnshieldedTransaction",
+    "createdUtxos": [
+     {
+      "owner": "mn_addr_preview1nfa4tz6u0a22zsp6n37xt39wjs7nhfjwscepl8xwhjvl76zkhgks0rqwje",
+      "tokenType": "0000000000000000000000000000000000000000000000000000000000000000",
+      "value": "5000000000",
+      "intentHash": "c81547c93cc82d3069dfd88f7aa2a8e07395d7de242738a7f8130c62c649b6e6",
+      "outputIndex": 0,
+      "registeredForDustGeneration": true
+     }
+    ],
+    "spentUtxos": [],
+    "transaction": {
+     "id": 52768,
+     "block": {
+      "timestamp": 1788660360001
+     }
+    }
+   },
+   {
+    "__typename": "UnshieldedTransaction",
+    "createdUtxos": [
+     {
+      "owner": "mn_addr_preview1nfa4tz6u0a22zsp6n37xt39wjs7nhfjwscepl8xwhjvl76zkhgks0rqwje",
+      "tokenType": "0000000000000000000000000000000000000000000000000000000000000000",
+      "value": "5000000000",
+      "intentHash": "ec4aa4b90d78fb3b315349ad27b19679671ba8c7b777af4818a368cc96234b4f",
+      "outputIndex": 0,
+      "registeredForDustGeneration": true
+     }
+    ],
+    "spentUtxos": [],
+    "transaction": {
+     "id": 55160,
+     "block": {
+      "timestamp": 1788827118000
+     }
+    }
+   },
+   {
+    "__typename": "UnshieldedTransaction",
+    "createdUtxos": [
+     {
+      "owner": "mn_addr_preview1nfa4tz6u0a22zsp6n37xt39wjs7nhfjwscepl8xwhjvl76zkhgks0rqwje",
+      "tokenType": "0000000000000000000000000000000000000000000000000000000000000000",
+      "value": "5000000000",
+      "intentHash": "913dc5e8404babcba6c34e9787f9e8578bd495aece8a7201d7012b12606cd852",
+      "outputIndex": 0,
+      "registeredForDustGeneration": true
+     }
+    ],
+    "spentUtxos": [],
+    "transaction": {
+     "id": 57572,
+     "block": {
+      "timestamp": 1789068984000
+     }
+    }
+   },
+   {
+    "__typename": "UnshieldedTransaction",
+    "createdUtxos": [
+     {
+      "owner": "mn_addr_preview1nfa4tz6u0a22zsp6n37xt39wjs7nhfjwscepl8xwhjvl76zkhgks0rqwje",
+      "tokenType": "0000000000000000000000000000000000000000000000000000000000000000",
+      "value": "5000000000",
+      "intentHash": "cd2c9a063cc911c58cc773d0bf85e6e3f41c2ce2543858c707a78c9e1c049d46",
+      "outputIndex": 0,
+      "registeredForDustGeneration": true
+     }
+    ],
+    "spentUtxos": [],
+    "transaction": {
+     "id": 58762,
+     "block": {
+      "timestamp": 1789166952000
+     }
+    }
+   },
+   {
+    "__typename": "UnshieldedTransaction",
+    "createdUtxos": [
+     {
+      "owner": "mn_addr_preview1nfa4tz6u0a22zsp6n37xt39wjs7nhfjwscepl8xwhjvl76zkhgks0rqwje",
+      "tokenType": "0000000000000000000000000000000000000000000000000000000000000000",
+      "value": "5000000000",
+      "intentHash": "9d99655d53b1cb1178b511907b05f794d11bcca5938138a419c7568d5cfb741c",
+      "outputIndex": 0,
+      "registeredForDustGeneration": true
+     }
+    ],
+    "spentUtxos": [],
+    "transaction": {
+     "id": 61143,
+     "block": {
+      "timestamp": 1789326468000
+     }
+    }
+   },
+   {
+    "__typename": "UnshieldedTransaction",
+    "createdUtxos": [
+     {
+      "owner": "mn_addr_preview1nfa4tz6u0a22zsp6n37xt39wjs7nhfjwscepl8xwhjvl76zkhgks0rqwje",
+      "tokenType": "0000000000000000000000000000000000000000000000000000000000000000",
+      "value": "5000000000",
+      "intentHash": "53ffcb4f8893339bdc2f22937c71eb0bfa284641f29935c8a712ca5fe80ffaa9",
+      "outputIndex": 0,
+      "registeredForDustGeneration": true
+     }
+    ],
+    "spentUtxos": [],
+    "transaction": {
+     "id": 64139,
+     "block": {
+      "timestamp": 1789519248000
+     }
+    }
+   },
+   {
+    "__typename": "UnshieldedTransaction",
+    "createdUtxos": [
+     {
+      "owner": "mn_addr_preview1nfa4tz6u0a22zsp6n37xt39wjs7nhfjwscepl8xwhjvl76zkhgks0rqwje",
+      "tokenType": "0000000000000000000000000000000000000000000000000000000000000000",
+      "value": "5000000000",
+      "intentHash": "a7d5347f30600eedcc0e0dba9b1b4413ce23af70d813224d4e8d6f81ce1dd996",
+      "outputIndex": 0,
+      "registeredForDustGeneration": true
+     }
+    ],
+    "spentUtxos": [],
+    "transaction": {
+     "id": 67836,
+     "block": {
+      "timestamp": 1790028930001
+     }
+    }
+   },
+   {
+    "__typename": "UnshieldedTransaction",
+    "createdUtxos": [
+     {
+      "owner": "mn_addr_preview1nfa4tz6u0a22zsp6n37xt39wjs7nhfjwscepl8xwhjvl76zkhgks0rqwje",
+      "tokenType": "0000000000000000000000000000000000000000000000000000000000000000",
+      "value": "5000000000",
+      "intentHash": "11494726299531098095eb4eda681af7486960d1ab66bc08f22a3ce267b40f57",
+      "outputIndex": 0,
+      "registeredForDustGeneration": true
+     }
+    ],
+    "spentUtxos": [],
+    "transaction": {
+     "id": 69800,
+     "block": {
+      "timestamp": 1790777742000
+     }
+    }
+   },
+   {
+    "__typename": "UnshieldedTransaction",
+    "createdUtxos": [
+     {
+      "owner": "mn_addr_preview1nfa4tz6u0a22zsp6n37xt39wjs7nhfjwscepl8xwhjvl76zkhgks0rqwje",
+      "tokenType": "0000000000000000000000000000000000000000000000000000000000000000",
+      "value": "5000000000",
+      "intentHash": "2772b04f365aa6e90983b08adf0bc2c932690fb4043b234a3d96d2951a8a9ba6",
+      "outputIndex": 0,
+      "registeredForDustGeneration": true
+     }
+    ],
+    "spentUtxos": [],
+    "transaction": {
+     "id": 70049,
+     "block": {
+      "timestamp": 1790888772000
+     }
+    }
+   },
+   {
+    "__typename": "UnshieldedTransaction",
+    "createdUtxos": [
+     {
+      "owner": "mn_addr_preview1nfa4tz6u0a22zsp6n37xt39wjs7nhfjwscepl8xwhjvl76zkhgks0rqwje",
+      "tokenType": "0000000000000000000000000000000000000000000000000000000000000000",
+      "value": "5000000000",
+      "intentHash": "475acdfce866960d0baa99d9197581ca8207a3c2bee2bf0a4fc6bb00d926ac4a",
+      "outputIndex": 0,
+      "registeredForDustGeneration": true
+     }
+    ],
+    "spentUtxos": [],
+    "transaction": {
+     "id": 70742,
+     "block": {
+      "timestamp": 1791151902000
+     }
+    }
+   },
+   {
+    "__typename": "UnshieldedTransaction",
+    "createdUtxos": [
+     {
+      "owner": "mn_addr_preview1nfa4tz6u0a22zsp6n37xt39wjs7nhfjwscepl8xwhjvl76zkhgks0rqwje",
+      "tokenType": "0000000000000000000000000000000000000000000000000000000000000000",
+      "value": "5000000000",
+      "intentHash": "8171861222fdaaeb2a64772bed5b7965887469c2e3f435790e21014a590e1bb2",
+      "outputIndex": 0,
+      "registeredForDustGeneration": true
+     }
+    ],
+    "spentUtxos": [],
+    "transaction": {
+     "id": 70743,
+     "block": {
+      "timestamp": 1791152088000
+     }
+    }
+   },
+   {
+    "__typename": "UnshieldedTransaction",
+    "createdUtxos": [
+     {
+      "owner": "mn_addr_preview1nfa4tz6u0a22zsp6n37xt39wjs7nhfjwscepl8xwhjvl76zkhgks0rqwje",
+      "tokenType": "0000000000000000000000000000000000000000000000000000000000000000",
+      "value": "5000000000",
+      "intentHash": "1b01335126fabd0915817b003a5dbb576e20e126dacefcdb47ffb4a3ef459a9b",
+      "outputIndex": 0,
+      "registeredForDustGeneration": true
+     }
+    ],
+    "spentUtxos": [],
+    "transaction": {
+     "id": 72369,
+     "block": {
+      "timestamp": 1791815508000
+     }
+    }
+   },
+   {
+    "__typename": "UnshieldedTransaction",
+    "createdUtxos": [
+     {
+      "owner": "mn_addr_preview1nfa4tz6u0a22zsp6n37xt39wjs7nhfjwscepl8xwhjvl76zkhgks0rqwje",
+      "tokenType": "0000000000000000000000000000000000000000000000000000000000000000",
+      "value": "5000000000",
+      "intentHash": "c4a08c3946b9547581b468fdeef60f470fb4b9d758694066952bb7d63320c725",
+      "outputIndex": 0,
+      "registeredForDustGeneration": true
+     }
+    ],
+    "spentUtxos": [],
+    "transaction": {
+     "id": 73191,
+     "block": {
+      "timestamp": 1792069956000
+     }
+    }
+   },
+   {
+    "__typename": "UnshieldedTransaction",
+    "createdUtxos": [
+     {
+      "owner": "mn_addr_preview1nfa4tz6u0a22zsp6n37xt39wjs7nhfjwscepl8xwhjvl76zkhgks0rqwje",
+      "tokenType": "0000000000000000000000000000000000000000000000000000000000000000",
+      "value": "5000000000",
+      "intentHash": "909d3516209aee32294345ed83509535154686389eda7f126abdf3a39e13e2e6",
+      "outputIndex": 0,
+      "registeredForDustGeneration": true
+     }
+    ],
+    "spentUtxos": [],
+    "transaction": {
+     "id": 73788,
+     "block": {
+      "timestamp": 1792192002001
+     }
+    }
+   },
+   {
+    "__typename": "UnshieldedTransaction",
+    "createdUtxos": [
+     {
+      "owner": "mn_addr_preview1nfa4tz6u0a22zsp6n37xt39wjs7nhfjwscepl8xwhjvl76zkhgks0rqwje",
+      "tokenType": "0000000000000000000000000000000000000000000000000000000000000000",
+      "value": "5000000000",
+      "intentHash": "ab159eb18436fac740f101eada5d337ffddac1ab4704339411900b85079878ea",
+      "outputIndex": 0,
+      "registeredForDustGeneration": true
+     }
+    ],
+    "spentUtxos": [],
+    "transaction": {
+     "id": 75021,
+     "block": {
+      "timestamp": 1792424652000
+     }
+    }
+   }
+  ]
+ }
+}

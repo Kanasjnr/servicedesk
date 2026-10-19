@@ -29,6 +29,9 @@
  *            tNIGHT), 1 = it could not run (bad arguments, missing token, endpoint unreachable).
  */
 
+import { realpathSync } from 'node:fs';
+import { pathToFileURL } from 'node:url';
+
 // Endpoints from the docs' Environment reference (guides/networks-and-environments).
 const INDEXERS = {
   preview: {
@@ -255,33 +258,44 @@ async function main() {
     }
   }
 
-  const history = await unshieldedHistory(net, args.address);
+  const report = fundsReport(await unshieldedHistory(net, args.address), args.address, net);
+  for (const line of report.lines) say(line);
+  process.exit(report.code || (finding ? 2 : 0));
+}
+
+// The TNIGHT and DUST lines for an address's unshielded history, and the exit code they give.
+// Exported so the test can feed it a recorded indexer answer.
+export function fundsReport(history, address, net) {
   const key = (u) => `${u.intentHash}:${u.outputIndex}`;
-  const spent = new Set(history.flatMap((t) => t.spentUtxos.filter((u) => u.owner === args.address).map(key)));
+  const spent = new Set(history.flatMap((t) => t.spentUtxos.filter((u) => u.owner === address).map(key)));
   const deposits = history.flatMap((t) => t.createdUtxos
-    .filter((u) => u.owner === args.address && u.tokenType === NIGHT)
+    .filter((u) => u.owner === address && u.tokenType === NIGHT)
     .map((u) => ({ ...u, at: t.transaction.block.timestamp, spent: spent.has(key(u)) })));
   const unspent = deposits.filter((u) => !u.spent);
   const registered = unspent.filter((u) => u.registeredForDustGeneration);
   const sum = (us) => us.reduce((n, u) => n + BigInt(u.value), 0n);
+  const lines = [];
 
   if (deposits.length === 0) {
-    say(`TNIGHT FINDING: no tNIGHT has ever reached this address on ${net}. Diagnose 2.`);
-    process.exit(2);
+    lines.push(`TNIGHT FINDING: no tNIGHT has ever reached this address on ${net}. Diagnose 2.`);
+    return { lines, code: 2 };
   }
-  if (deposits.length > SHOWN) say(`TNIGHT ${deposits.length - SHOWN} earlier tNIGHT output(s) not shown`);
-  for (const u of deposits.slice(-SHOWN)) say(`TNIGHT ${when(u.at)}  ${night(u.value).padStart(16)}  ${u.spent ? 'spent' : u.registeredForDustGeneration ? 'unspent, registered for DUST' : 'unspent, NOT registered for DUST'}`);
-  say(`TNIGHT unspent: ${night(sum(unspent))} in ${unspent.length} UTXO(s), ${registered.length} registered for DUST`);
+  if (deposits.length > SHOWN) lines.push(`TNIGHT ${deposits.length - SHOWN} earlier tNIGHT output(s) not shown`);
+  for (const u of deposits.slice(-SHOWN)) lines.push(`TNIGHT ${when(u.at)}  ${night(u.value).padStart(16)}  ${u.spent ? 'spent' : u.registeredForDustGeneration ? 'unspent, registered for DUST' : 'unspent, NOT registered for DUST'}`);
+  lines.push(`TNIGHT unspent: ${night(sum(unspent))} in ${unspent.length} UTXO(s), ${registered.length} registered for DUST`);
   if (unspent.length === 0) {
-    say('DUST FINDING: every tNIGHT UTXO here has been spent, so nothing here generates DUST. Diagnose 3.');
-    process.exit(2);
+    lines.push('DUST FINDING: every tNIGHT UTXO here has been spent, so nothing here generates DUST. Diagnose 3.');
+    return { lines, code: 2 };
   }
   if (registered.length < unspent.length) {
-    say(`DUST FINDING: ${unspent.length - registered.length} unspent UTXO(s), ${night(sum(unspent) - sum(registered))}, are not registered, so they generate no DUST. Remediation 3.`);
-    process.exit(2);
+    lines.push(`DUST FINDING: ${unspent.length - registered.length} unspent UTXO(s), ${night(sum(unspent) - sum(registered))}, are not registered, so they generate no DUST. Remediation 3.`);
+    return { lines, code: 2 };
   }
-  say('DUST ok: all unspent tNIGHT is registered, so DUST is accruing to the DUST address it was registered to. If the wallet still shows none, Diagnose 3.');
-  process.exit(finding ? 2 : 0);
+  lines.push('DUST ok: all unspent tNIGHT is registered, so DUST is accruing to the DUST address it was registered to. If the wallet still shows none, Diagnose 3.');
+  return { lines, code: 0 };
 }
 
-main().catch((e) => fail(`could not run: ${e.message}`));
+// Run only when called directly, not when the test imports fundsReport.
+if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
+  main().catch((e) => fail(`could not run: ${e.message}`));
+}
