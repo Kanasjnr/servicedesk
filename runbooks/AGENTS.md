@@ -7,8 +7,7 @@ end up here; **work out which one you are first**, then follow that section. The
 *using* and *creating* runbooks specifically.
 
 A runbook is a self-contained diagnosis-and-fix guide for a recurring Midnight ecosystem
-issue: symptom → root cause → key identifiers → a runnable diagnostic → remediation
-options → references. It's written to be picked up mid-incident by either kind of agent.
+issue: symptom → root cause → a runnable diagnostic → remediation options → how to confirm the fix → when to stop → key identifiers → references. It's written to be picked up mid-incident by either kind of agent. Runbooks written before this format use an older layout with the same content.
 
 ---
 
@@ -38,6 +37,7 @@ authoritative.
    addresses and identifiers in a runbook are point-in-time as of its compile date. Re-check
    anything you're about to state as fact against current source (`/verify`, octocode, the
    actual repo) — do not repeat a runbook claim you haven't re-grounded.
+   Where a runbook's Key identifiers table gives a check command for a value, run it.
 4. **Never take the user's keys or seed phrase.** Not "paste it here", not "just for this
    step". Any remediation that requires signing is **run by the user, locally, on their
    machine.** Hand them the script; the script reads secrets from a local file that never
@@ -97,8 +97,7 @@ The triage thread *is* your source material — the worked case. (Example: servi
 
 1. **Follow the README structure and conventions.** One directory per runbook,
    `<area>-<short-topic>-runbook/` (kebab-case), holding the runbook file
-   `<area>-<short-topic>-runbook.md` and its assets. Sections: Symptom → Root cause →
-   Key identifiers → Diagnose → Remediation options → Reference material. Add a row to the
+   `<area>-<short-topic>-runbook.md` and its assets. Start from the [template](authoring/runbook-template.md) and follow the steps in its header (trace each fact to a source, run the check, cold read). Add a row to the
    README [Index](README.md).
 2. **Symptom** in the user's terms (what they'd search for), including the exact
    warning/error text. **Root cause** stated only once *verified* — pull the mechanism from
