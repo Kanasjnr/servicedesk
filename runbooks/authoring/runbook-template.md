@@ -31,6 +31,8 @@ Three rules keep it from going stale:
 2. Write conditions, not statements about the world. "If the error names the old host, the config has not moved" stays true. "The old host returns 410" is false the day the host changes. A date in a step is a sign of a statement.
 3. Every fact you do store is a row in Key identifiers, with a public source and the exact text that must be in it. A script tests the rows daily. Trace each fact to a source you opened today: memory is not a source, for a person or for an agent.
 
+Link other runbooks, scripts and repo files by their full GitHub URL, `https://github.com/midnightntwrk/servicedesk/blob/main/runbooks/...`, not a relative path: a runbook is often read outside the repo, pasted to an agent or indexed on its own, where a relative path has nothing to resolve against. Links to files your pull request adds 404 until it merges.
+
 A claim with no source says so in place: measured, reported by someone named, inferred, or not tested. The investigation, the measurements, the corrections and the advice you retired belong in the pull request and git history, not in a file beside the runbook. Link an issue or a commit under Reference material if a reader may want them.
 
 Before writing: check that the problem recurs or took real investigation, and grep runbooks/ for the error text. Extend the runbook that owns a mechanism instead of explaining it twice. If the docs already cover the fix, write only what they leave out.
@@ -131,7 +133,7 @@ One row per fact and source. The source cell holds one reference in backticks, a
 The text cannot contain a backtick. Write a pipe as \|. Use an issue row for "this fix has not shipped". A row with no such reference is not tested, so keep those for sources that need a login.
 -->
 
-Each row names a public source and text it must contain: a repo file (`github:`), a published package file (`npm:`), or an issue's state (`issue:`). [check-runbook.mjs](../authoring/check-runbook.mjs) tests every row daily against each source's newest version. For your installed version, look under `node_modules/<package>/<path>`. If a source disagrees with a row, the source is right.
+Each row names a public source and text it must contain: a repo file (`github:`), a published package file (`npm:`), or an issue's state (`issue:`). [check-runbook.mjs](https://github.com/midnightntwrk/servicedesk/blob/main/runbooks/authoring/check-runbook.mjs) tests every row daily against each source's newest version. For your installed version, look under `node_modules/<package>/<path>`. If a source disagrees with a row, the source is right.
 
 | Fact this runbook relies on | Source of truth | Must contain |
 |---|---|---|
@@ -144,4 +146,4 @@ Each row names a public source and text it must contain: a repo file (`github:`)
 <!-- Only what a reader may need and no row covers: the issue or commit that records a measurement, and any script. A script is Node with no install, says in its header what it reads and that it signs nothing, and exits 0 clean, 2 finding, 1 could not run. -->
 
 - **Measurements:** <the issue or commit where the numbers behind a "measured" claim are recorded>
-- **Script:** [scripts/<name>.mjs](scripts/<name>.mjs) <what it does>
+- **Script:** [scripts/<name>.mjs](https://github.com/midnightntwrk/servicedesk/blob/main/runbooks/<area>-<short-topic>-runbook/scripts/<name>.mjs) <what it does>

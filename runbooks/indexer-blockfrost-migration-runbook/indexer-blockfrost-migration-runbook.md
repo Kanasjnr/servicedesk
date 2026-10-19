@@ -28,16 +28,16 @@ Each fact is in Key identifiers with its source. A claim marked **measured**, **
 | If you see | Go to |
 |---|---|
 | An error that names a preprod or mainnet host ending in `midnight.network`, including `ENDPOINT_DECOMMISSIONED` | The docs guide: the config still points at an old endpoint. Then Diagnose 1. |
-| HTTP 403 from Blockfrost, such as `Missing project token. Please include project_id in your request.` or `Invalid project token.` | The docs guide. Then Confirm fixed. |
+| HTTP 403 from Blockfrost, such as `Missing project token. Please include project_id in your request.`, `Invalid project token.` or `Network token mismatch. Are you using token for the correct network?` | The docs guide. Then Confirm fixed. |
 | `TypeError: Invalid URL` while a wallet is built | The docs guide. Then Confirm fixed. |
 | After the switch, wallet sync never finishes and the log repeats `values inserted non-linearly into dust generation tree`, or the same text for another tree | Diagnose 2 |
-| `Wallet sync timeout after 90000ms` right after funding, although the funds are on chain | Remediation 3 |
+| `Wallet sync timeout after 90000ms` right after funding, although the funds are on chain and the sync log shows `unshielded=false` | Remediation 3 |
 | One `Wallet.Sync: [object Object]` or `[object CloseEvent]` per sub-wallet, after which sync carries on (measured) | No action. Inferred: a subscription dropped and resumed. If it repeats and sync makes no progress, Stop and escalate. |
 
 ### Not this runbook
 
-- **The same `values inserted non-linearly` error when the wallet first synced on the indexer you are on now.** See the [cursor-mismatch runbook](../wallet-sync-cursor-indexer-mismatch-runbook/wallet-sync-cursor-indexer-mismatch-runbook.md), which owns the mechanism.
-- **`1010: Invalid Transaction: Custom error: N`.** See the [1010 runbook](../node-1010-custom-error-runbook/node-1010-custom-error-runbook.md).
+- **The same `values inserted non-linearly` error when the wallet first synced on the indexer you are on now.** See the [cursor-mismatch runbook](https://github.com/midnightntwrk/servicedesk/blob/main/runbooks/wallet-sync-cursor-indexer-mismatch-runbook/wallet-sync-cursor-indexer-mismatch-runbook.md), which owns the mechanism.
+- **`1010: Invalid Transaction: Custom error: N`.** See the [1010 runbook](https://github.com/midnightntwrk/servicedesk/blob/main/runbooks/node-1010-custom-error-runbook/node-1010-custom-error-runbook.md).
 - **A sync timeout where an explorer does not show the funds on chain.** Not covered: open an issue at the front door under Stop and escalate.
 - **A network the docs list as Midnight-hosted.** Nothing here applies. For `values inserted non-linearly` there, use the cursor-mismatch runbook above.
 
@@ -48,7 +48,7 @@ Each fact is in Key identifiers with its source. A claim marked **measured**, **
 
 ## Before you start
 
-- **Do the docs migration first.** This runbook assumes the new endpoints answer with your token, which the docs' check command shows.
+- **Do the docs migration first.** The new endpoints must answer with your token, as the docs' check command shows.
 - **The token and the seed are secrets.** An agent working for a user never asks to see either. The user sets the token in their own environment. Strip the token from everything you paste or share.
 - **The Diagnose commands are read-only.** Creating or funding a wallet is always the user's step.
 - **Confirm the seed is held before any saved state is set aside.** Ask the user to confirm it, not to show it. If it is not held, leave the state where it is and Stop and escalate.
@@ -63,9 +63,9 @@ Go where the Symptom table sent you. With no clear symptom, run both steps.
    grep -rnoE "(indexer|rpc)\.(preprod|mainnet)\.midnight\.network" --exclude-dir=node_modules --exclude-dir=.git .
    ```
 
-   It prints only the file, line number and host, so no secret on that line is shown. A hit in code or config is a consumer that has not moved: fix it with the docs guide. Hits in comments and prose do not count. Move RPC URLs too, even if the old ones still answer. It cannot see CI secrets, a deployed environment, or defaults inside a dependency: check those by hand, and set a CI secret again instead of printing it.
+   It prints only the file, line and host, never a secret. A hit in code or config is a consumer that has not moved: fix it with the docs guide. Hits in comments and prose do not count. Move RPC URLs too, even if the old ones still answer. It cannot see CI secrets, a deployed environment, or defaults inside a dependency: check those by hand, and set a CI secret again instead of printing it.
 
-2. **Does the wallet resume from state saved on another indexer?** Search your code for `serializeState` and `restore` to find where state is written and read. Also look for a fast-sync or preseed bundle, or stored event or transaction ids.
+2. **Does the wallet resume from state saved on another indexer?** Search for `serializeState` and `restore` to find where state is saved and read. Also look for a fast-sync or preseed bundle, or stored event or transaction ids.
    - Nothing is saved, because the wallet syncs from genesis on every start: this cause is ruled out. If sync still fails, Stop and escalate.
    - A bundle whose manifest has an `indexer` field: `grep -oE '"indexer": *"([a-z]+://)?[A-Za-z0-9.-]+' <manifest.json>` prints its host and nothing after it. A host other than the one in your indexer URL means not portable. The same host: see the last bullet.
    - State or ids from a wallet that first synced on another indexer, even if the file was rewritten since (inferred), a manifest with no `indexer` field, or no way to tell: treat it as not portable.
@@ -76,7 +76,7 @@ Go where the Symptom table sent you. With no clear symptom, run both steps.
 ## Remediation
 
 1. **Set aside state and stored ids saved against the old indexer, and sync from genesis.** What the docs leave out:
-   - With the seed confirmed held, stop the app, then move the old state aside instead of deleting it, until the genesis sync has finished and the wallet shows the balance you expect. Then delete it.
+   - With the seed confirmed held, stop the app, then move the old state aside, and delete it only once the genesis sync has finished and the wallet shows the balance you expect.
    - Raise two timeouts above the full-sync time the docs give: the app's own whole-sync timeout, and the test runner's hook timeout if tests do the sync.
 
    *Trade-off:* the app is down for a long first sync.
@@ -88,7 +88,7 @@ Go where the Symptom table sent you. With no clear symptom, run both steps.
 3. **Replace a funding wait you cannot configure.** The docs say what to wait for, but not that `waitForFunds` in testkit-js takes no timeout. Check your version:
 
    ```sh
-   grep -nE "syncWallet = |waitForFunds = |syncWallet\(wallet" node_modules/@midnight-ntwrk/testkit-js/dist/index.mjs
+   grep -rnE "syncWallet = |waitForFunds = |syncWallet\(wallet" node_modules/@midnight-ntwrk/testkit-js/dist --include=index.mjs --include=index.js
    ```
 
    It prints the `syncWallet =` line with its default, the `waitForFunds =` line, and each `syncWallet(wallet` call.
@@ -97,7 +97,7 @@ Go where the Symptom table sent you. With no clear symptom, run both steps.
 
    *Trade-off:* you own a small funding helper.
 
-4. **Do not shift cursors by a fixed offset or by one derived from the numbers in the error.** If you cannot afford a genesis sync, the re-anchoring approach and its risks are in the [cursor-mismatch runbook](../wallet-sync-cursor-indexer-mismatch-runbook/wallet-sync-cursor-indexer-mismatch-runbook.md#remediation).
+4. **Do not shift cursors by a fixed offset or by one derived from the numbers in the error.** If you cannot afford a genesis sync, the re-anchoring approach and its risks are in the [cursor-mismatch runbook](https://github.com/midnightntwrk/servicedesk/blob/main/runbooks/wallet-sync-cursor-indexer-mismatch-runbook/wallet-sync-cursor-indexer-mismatch-runbook.md#remediation).
 
 ## Confirm fixed
 
@@ -124,7 +124,7 @@ Include the error text, the token check's output, and `npm ls @midnight-ntwrk/wa
 
 ## Key identifiers
 
-Each row names a public source and text it must contain: a repo file (`github:`), a published package file (`npm:`), or an issue's state (`issue:`). [check-runbook.mjs](../authoring/check-runbook.mjs) tests every row daily against each source's newest version. For your installed version, look under `node_modules/<package>/<path>`. If a source disagrees with a row, the source is right.
+Each row names a public source and text it must contain: a repo file (`github:`), a published package file (`npm:`), or an issue's state (`issue:`). [check-runbook.mjs](https://github.com/midnightntwrk/servicedesk/blob/main/runbooks/authoring/check-runbook.mjs) tests every row daily against each source's newest version. For your installed version, look under `node_modules/<package>/<path>`. If a source disagrees with a row, the source is right.
 
 | Fact this runbook relies on | Source of truth | Must contain |
 |---|---|---|
@@ -146,4 +146,4 @@ Each row names a public source and text it must contain: a repo file (`github:`)
 ## Reference material
 
 - **Measurements:** claims marked measured were observed once, in the preprod move of `midnightntwrk/midnight-examples`. The numbers are in [this runbook as first written](https://github.com/midnightntwrk/servicedesk/blob/9c63c992a37a6f96ccc2a7f7c40f36cd3c04e03b/runbooks/indexer-blockfrost-migration-runbook/indexer-blockfrost-migration-runbook.md) and `midnightntwrk/servicedesk#216`.
-- **Script:** [scripts/check-indexer-cursor.mjs](scripts/check-indexer-cursor.mjs) compares one cursor on two live indexers. No step uses it.
+- **Script:** [scripts/check-indexer-cursor.mjs](https://github.com/midnightntwrk/servicedesk/blob/main/runbooks/indexer-blockfrost-migration-runbook/scripts/check-indexer-cursor.mjs) compares one cursor on two live indexers. No step uses it.
