@@ -55,6 +55,8 @@ const TIMEOUT_MS = 60_000;
 const TOKEN = process.env.BLOCKFROST_PROJECT_ID?.trim() ?? '';
 const redact = (s) => (TOKEN ? String(s).split(TOKEN).join('<token>') : String(s));
 const say = (s = '') => console.log(redact(s));
+// The newest tNIGHT outputs listed; a busy address has hundreds.
+const SHOWN = 10;
 const fail = (s) => { console.error(redact(s)); process.exit(1); };
 
 function parseArgs(argv) {
@@ -244,7 +246,7 @@ async function main() {
     } else {
       const status = tx.transactionResult?.status ?? 'unknown';
       const paid = tx.unshieldedCreatedOutputs.filter((u) => u.owner === args.address && u.tokenType === NIGHT).reduce((n, u) => n + BigInt(u.value), 0n);
-      say(`ON CHAIN ${status === 'SUCCESS' ? 'ok' : 'FINDING'}: ${status} in block ${tx.block.height} at ${when(tx.block.timestamp)} (indexer tx ${tx.id})${status === 'SUCCESS' ? '' : '. Stop and escalate.'}`);
+      say(`ON CHAIN${status === 'SUCCESS' ? '' : ' FINDING'}: ${status} in block ${tx.block.height} at ${when(tx.block.timestamp)} (indexer tx ${tx.id})${status === 'SUCCESS' ? '' : '. Stop and escalate.'}`);
       if (status !== 'SUCCESS') finding = true;
       else if (paid === 0n) {
         say('ON CHAIN FINDING: this transaction paid no tNIGHT to this address, so the faucet was given another address. Remediation 1.');
@@ -267,7 +269,8 @@ async function main() {
     say(`TNIGHT FINDING: no tNIGHT has ever reached this address on ${net}. Diagnose 2.`);
     process.exit(2);
   }
-  for (const u of deposits) say(`TNIGHT ${when(u.at)}  ${night(u.value).padStart(16)}  ${u.spent ? 'spent' : u.registeredForDustGeneration ? 'unspent, registered for DUST' : 'unspent, NOT registered for DUST'}`);
+  if (deposits.length > SHOWN) say(`TNIGHT ${deposits.length - SHOWN} earlier tNIGHT output(s) not shown`);
+  for (const u of deposits.slice(-SHOWN)) say(`TNIGHT ${when(u.at)}  ${night(u.value).padStart(16)}  ${u.spent ? 'spent' : u.registeredForDustGeneration ? 'unspent, registered for DUST' : 'unspent, NOT registered for DUST'}`);
   say(`TNIGHT unspent: ${night(sum(unspent))} in ${unspent.length} UTXO(s), ${registered.length} registered for DUST`);
   if (unspent.length === 0) {
     say('DUST FINDING: every tNIGHT UTXO here has been spent, so nothing here generates DUST. Diagnose 3.');

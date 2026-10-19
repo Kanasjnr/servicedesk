@@ -94,7 +94,7 @@ Run [scripts/check-test-funds.mjs](https://github.com/midnightntwrk/servicedesk/
 
    *Trade-off:* none.
 
-2. **Use the other faucet for the same network, or wait.** Each network has the faucet the docs' [Environment reference](https://docs.midnight.network/guides/networks-and-environments#environment-reference) lists and a second one, both in Key identifiers. Request from the one you have not used, or retry a Nethermind faucet after a few minutes. A failed drip returns the daily slot, so that faucet can be asked again. If both refuse, wait until the time in the `next attempt is allowed at` message, or ask in the Midnight Discord's developer channel for a transfer to the unshielded address. Share only the `mn_addr_` address: anyone asking for a seed, or offering help by direct message, is not support.
+2. **Use the other faucet for the same network, or wait.** Each network has the faucet the docs' [Environment reference](https://docs.midnight.network/guides/networks-and-environments#environment-reference) lists and a second one, both in Key identifiers. Request from the one you have not used, or retry a Nethermind faucet after a few minutes. If that faucet runs the current faucet code, a failed drip returns the daily slot, so it can be asked again. If both refuse, wait until the time in the `next attempt is allowed at` message, or ask in the Midnight Discord's developer channel for a transfer to the unshielded address. Share only the `mn_addr_` address: anyone asking for a seed, or offering help by direct message, is not support.
 
    *Trade-off:* waiting until the time the faucet gives, or depending on someone else.
 
