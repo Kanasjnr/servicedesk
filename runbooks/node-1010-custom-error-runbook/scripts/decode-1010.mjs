@@ -306,6 +306,8 @@ const DUST_FIX =
 const DUST_196 = `The DUST that pays the fee is already spent on chain. Reproduced on node 1.0.400 with two wallet instances on one seed: the second transaction got 196 once the first was in a block. ${DUST_FIX}`;
 const DUST_170 =
   "The DUST spend proof that pays the fee did not verify. The ledger's own text: \"this is just as likely a disagreement on dust state on the declared time as the proof being invalid\". Let the wallet finish syncing and build again. If every transaction on the network gets 170, faucet included, the problem is on the network's side, not in the DApp (servicedesk#150, stagenet: an indexer bug). In servicedesk#52 a client on ledger-v8 8.0.3 got 170 on preprod while 8.1.0 deployed; the cause wasn't established.";
+const BALANCE_194 =
+  'A contract call pays out more of a token than the contract holds: the ledger subtracts each payout from the contract\'s balance and rejects the transaction if it would go below zero. Reproduced on node 1.0.0 and 1.0.400 with a circuit that sends NIGHT from a contract that holds none. On Mainnet, wallets have no NIGHT on Midnight to pay into a contract, so every circuit that sends NIGHT gets this: see the contract-native-night-mainnet runbook.';
 const DISMISS_TEXT = '"exceeded the maximum time to dismiss for transaction size"';
 const BLOCK_TEXT = '"exceeded block limit in transaction fee computation"';
 const HINTS = {
@@ -315,10 +317,12 @@ const HINTS = {
     182: TTL_182,
     186: "The transaction's effects don't match what its contract calls claim. servicedesk#37: midnight-js 4.0.4 put the offer for a fallible claim in the guaranteed section; midnight-js 4.1.1 fixed it.",
     193: REPLAY_193,
+    194: BALANCE_194,
     196: DUST_196,
   },
   '2.x': {
     170: DUST_170,
+    194: BALANCE_194,
     196: DUST_196,
     228: `Intent TTL expired. On node 1.0.x this was 182, reproduced there with a TTL 5 minutes in the past. ${TTL_FIX}`,
     229: `Intent TTL too far in the future. On node 1.0.x this was 182, reproduced there with a TTL 30 days ahead. ${TTL_FIX}`,
