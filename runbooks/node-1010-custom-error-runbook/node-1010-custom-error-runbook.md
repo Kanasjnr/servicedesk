@@ -293,6 +293,7 @@ expired and 30 days ahead, came back as 182, from the first check.
    | 170 | 170 | `Malformed.InvalidDustSpendProof` | The DUST spend proof didn't verify, which is as likely a disagreement on DUST state as a bad proof | `servicedesk#150`, `servicedesk#52` | Remediation 4 |
    | 168 | 231, 232 | `Malformed.FeeCalculation` | Too slow to validate for its size, or too big for a block | `servicedesk#100`, `servicedesk#117` | Remediation 5 |
    | 186 | 212 to 218 | `Malformed.EffectsCheckFailure` | The transaction's effects don't match what its contract calls claim | `servicedesk#37` | Remediation 6 |
+   | 194 | 194 | `Invalid.BalanceCheckOutOfBounds` | A contract call pays out more of a token than the contract holds. On Mainnet, every circuit that sends NIGHT | reproduced (node 1.0.0 and 1.0.400) | [NIGHT on Mainnet](../contract-native-night-mainnet-runbook/contract-native-night-mainnet-runbook.md) |
 
    On node 1.0.x, 182 and 193 can each carry all three cases (TTL expired, TTL too far ahead,
    intent already exists), because both wrap the ledger's `TransactionApplicationError`. In the
