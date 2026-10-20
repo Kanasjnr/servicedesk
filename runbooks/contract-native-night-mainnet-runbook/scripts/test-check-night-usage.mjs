@@ -16,7 +16,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const CHECK = path.join(path.dirname(fileURLToPath(import.meta.url)), 'check-night-usage.mjs');
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'test-check-night-'));
@@ -356,6 +356,105 @@ const COMPILED_CLASH = `class Contract {
 }
 `;
 
+const PAY_GENERIC = `module Pay<T> {
+  import CompactStandardLibrary;
+  export circuit takeNight(a: Uint<128>): [] {
+    receiveUnshielded(nativeToken(), a);
+  }
+}
+`;
+const SHOP_GENERIC = `pragma language_version 0.23;
+import CompactStandardLibrary;
+import "Pay"<Field>;
+
+export circuit buy(amount: Uint<128>): [] {
+  takeNight(disclose(amount));
+}
+`;
+const BRANCHES = `pragma language_version 0.23;
+import CompactStandardLibrary;
+
+export circuit pay(useNight: Boolean, amount: Uint<64>, to: UserAddress): [] {
+  if (disclose(useNight)) {
+    const color = nativeToken();
+    sendUnshielded(color, disclose(amount), right<ContractAddress, UserAddress>(disclose(to)));
+  } else {
+    const color = tokenType(pad(32, "own"), kernel.self());
+    sendUnshielded(color, disclose(amount), right<ContractAddress, UserAddress>(disclose(to)));
+  }
+}
+`;
+const COMMENTED_IMPORT = `pragma language_version 0.23;
+import CompactStandardLibrary;
+/*
+      import "Missing";
+*/
+export ledger n: Counter;
+export circuit inc(): [] { n.increment(1); }
+`;
+// 0.34.0 and 0.35.0 output (trimmed from 0.35.0): async circuits, awaited calls.
+const COMPILED_ASYNC = `class Contract {
+  constructor(...args_0) {
+    this.circuits = {
+      take: async (...args_1) => {
+        const result_0 = await this._take_0(context, partialProofData, amount_0);
+        return result_0;
+      },
+      viaHelper: async (...args_1) => {
+        const result_0 = await this._viaHelper_0(context, partialProofData, amount_0);
+        return result_0;
+      },
+      custom: async (...args_1) => {
+        const result_0 = await this._custom_0(context, partialProofData, amount_0);
+        return result_0;
+      }
+    };
+  }
+  _nativeToken_0() {
+    return ${ZERO_ARRAY};
+  }
+  _tokenType_0(domain_sep_0, contractAddress_0) {
+    return x;
+  }
+  async _receiveUnshielded_0(context, partialProofData, color_0, amount_0) {
+    return [];
+  }
+  _night_0() { return this._nativeToken_0(); }
+  async _take_0(context, partialProofData, amount_0) {
+    await this._receiveUnshielded_0(context,
+                                    partialProofData,
+                                    this._nativeToken_0(),
+                                    amount_0);
+    return [];
+  }
+  async _viaHelper_0(context, partialProofData, amount_0) {
+    await this._receiveUnshielded_0(context,
+                                    partialProofData,
+                                    this._night_0(),
+                                    amount_0);
+    return [];
+  }
+  async _custom_0(context, partialProofData, amount_0) {
+    await this._receiveUnshielded_0(context,
+                                    partialProofData,
+                                    this._tokenType_0(own_0, this._ownAddress_0()),
+                                    amount_0);
+    return [];
+  }
+}
+`;
+// A circuits entry this checker can't read: must not come out as an all-clear.
+const COMPILED_UNKNOWN = `class Contract {
+  constructor(...args_0) {
+    this.circuits = {
+      take: function (...args_1) {
+        return this.run('take', args_1);
+      }
+    };
+  }
+}
+`;
+
 // The shape of a 0.31.1 contract/index.js (trimmed): exported names, then the methods.
 const COMPILED = `class Contract {
   constructor(...args_0) {
@@ -540,6 +639,12 @@ const shop = write('mod/shop.compact', SHOP);
 const shopPrefix = write('mod/shop-prefix.compact', SHOP_PREFIX);
 const shopInline = write('inline/shop.compact', SHOP_INLINE);
 const shopMissing = write('missing/shop.compact', SHOP_MISSING);
+write('generic/Pay.compact', PAY_GENERIC);
+const shopGeneric = write('generic/shop.compact', SHOP_GENERIC);
+const branches = write('branches/b.compact', BRANCHES);
+const commentedImport = write('commented/c.compact', COMMENTED_IMPORT);
+write('compiled/managed/async/contract/index.js', COMPILED_ASYNC);
+write('compiled/managed/unknown/contract/index.js', COMPILED_UNKNOWN);
 const clash = write('clash/clash.compact', CLASH);
 const exportList = write('exportlist/reexport.compact', EXPORT_LIST);
 const moreShapes = write('more/shapes.compact', MORE_SHAPES);
@@ -608,6 +713,9 @@ const cases = [
   ['a module file alone has no entry points', () => { const { code, j } = json([path.join(TMP, 'mod', 'Pay.compact')]); return code === 0 && j.results[0].circuits === 0; }],
   ['an import that isn\'t found is reported', () => { const { j } = json([shopMissing]); const r = text([shopMissing]); return JSON.stringify(j.results[0].unresolvedImports) === '["lib/Missing"]' && r.out.includes('not followed') && r.code === 3 && r.out.includes("isn't an all-clear"); }],
   ['a module circuit named like a top-level one, imported with a prefix', () => { const { code, j } = json([clash]); const f = found(j); return code === 2 && f.deposit?.certain === true && f.pay === undefined && j.results[0].circuits === 2 && !j.results[0].unresolvedImports; }],
+  ['a generic module import, import "Pay"<Field>', () => { const { code, j } = json([shopGeneric]); return code === 2 && found(j).buy?.certain === true && !j.results[0].unresolvedImports; }],
+  ['a name bound to NIGHT in one branch and a minted token in the other', () => { const { code, j } = json([branches]); return code === 2 && found(j).pay?.certain === true && found(j).pay.kinds === 'send'; }],
+  ['an indented import inside a block comment is ignored', () => { const { code, j } = json([commentedImport]); return code === 0 && !j.results[0].unresolvedImports; }],
   ['an export list makes a circuit an entry point', () => { const { code, j } = json([exportList]); const f = found(j); return code === 2 && f.pay?.certain === true && j.results[0].circuits === 1; }],
   ['NIGHT in a struct field', () => found(json([moreShapes]).j).viaStruct?.certain === true],
   ['a pure helper that returns nativeToken()', () => found(json([moreShapes]).j).viaPureHelper?.certain === true],
@@ -625,6 +733,8 @@ const cases = [
   ['compiled: a ledger read and a witness are possible', () => vaultCompiled.payFee?.certain === false && vaultCompiled.payFee.why.includes('a ledger field') && vaultCompiled.depositWitness?.certain === false && vaultCompiled.depositWitness.why.includes('witness payToken()')],
   ['compiled: a balance check through the standard library\'s helpers', () => vaultCompiled.hasNight?.certain === true && vaultCompiled.hasNight.kinds === 'balance'],
   ['compiled: each entry point is the method its circuits entry calls', () => { const { code, j } = json([path.join(TMP, 'compiled', 'managed', 'clash')]); const f = found(j); return code === 2 && f.deposit?.certain === true && f.pay === undefined; }],
+  ['compiled: 0.34.0 and 0.35.0 output (async circuits, awaited calls)', () => { const { code, j } = json([path.join(TMP, 'compiled', 'managed', 'async')]); const f = found(j); return code === 2 && j.results[0].circuits === 3 && f.take?.certain === true && f.viaHelper?.certain === true && f.custom === undefined; }],
+  ['compiled: circuits it can\'t read give exit 1, not an all-clear', () => { const r = text([path.join(TMP, 'compiled', 'managed', 'unknown')]); return r.code === 1 && r.err.includes("couldn't read the circuits"); }],
   ['compiled: names are the circuit names', () => json([compiledVault]).j.results[0].found.every((f) => !/_\d+$/.test(f.circuit))],
   // Files and directories
   ['a directory: finds the NIGHT file, not the compiled copy', () => {
@@ -661,12 +771,18 @@ const cases = [
   ['error: plain Insufficient funds on preprod is not this runbook', () => { const { code, j } = json(['--error', ERR_RECEIVE, '--network', 'preprod']); return code === 0 && j.verdict === null; }],
   ['error: the shielded wallet\'s Insufficient funds is not this runbook', () => { const { code, j } = json(['--error', ERR_SHIELDED]); return code === 0 && j.verdict === null && j.summary.includes('shielded'); }],
   ['error: the advice for err.cause uses a bigint replacer', () => json(['--error', ERR_RECEIVE]).j.summary.includes("typeof v === 'bigint'")],
+  ['error: the shielded wallet\'s fallible-segment message with 64 zeros is not NIGHT', () => { const { code, j } = json(['--error', ERR_RECEIVE_JSON.replace('"Insufficient funds"', '"Insufficient funds for fallible segment 1"')]); return code === 0 && j.verdict === null; }],
+  ['error: 194 on preprod is not this runbook', () => { const { code, j } = json(['--error', ERR_SEND_RPC, '--network', 'preprod']); return code === 0 && j.verdict === null && j.summary.includes('preprod'); }],
+  ['error: the decoder\'s 183 (Malformed.BalanceCheckOutOfBounds) is not 194', () => { const { code, j } = json(['--error', 'Custom error: 183 → Malformed.BalanceCheckOutOfBounds']); return code === 0 && j.verdict === null; }],
+  ['error: the decoder\'s 194 line could be', () => json(['--error', 'Custom error: 194 → Invalid.BalanceCheckOutOfBounds']).code === 3],
   ['error: a DUST shortage is not this runbook', () => { const { code, j } = json(['--error', ERR_DUST]); return code === 0 && j.verdict === null && j.tokenType === 'dust' && j.next.includes('cnight-dust-duplicate'); }],
   ['error: the RPC-CORE line with 194 could be', () => { const { code, j } = json(['--error', ERR_SEND_RPC]); return code === 3 && j.verdict === 'maybe' && j.summary.includes('sends NIGHT'); }],
   ['error: SubmissionError without the code says where the code is', () => { const { code, j } = json(['--error', ERR_SEND_JS]); return code === 3 && j.summary.includes('RPC-CORE') && j.summary.includes('err.message'); }],
   ['error: another code is not this runbook', () => { const { code, j } = json(['--error', '1010: Invalid Transaction: Custom error: 182']); return code === 0 && j.verdict === null; }],
   ['error: unrelated text points to the lookup', () => { const r = text(['--error', 'ECONNREFUSED 127.0.0.1:6300']); return r.code === 0 && r.out.startsWith('Not this runbook') && r.out.includes('README.md#error-string-lookup') && !r.out.includes('Runbook:'); }],
   ['error: --error - reads stdin', () => { const { code, j } = json(['--error', '-'], ERR_RECEIVE_JSON); return code === 2 && j.verdict === 'night'; }],
+  // As a module
+  ['importing it doesn\'t run the command', () => { const r = spawnSync(process.execPath, ['--input-type=module', '-e', `import(${JSON.stringify(pathToFileURL(CHECK).href)}).then((m) => console.log(Object.keys(m).sort().join(',')))`], { encoding: 'utf8' }); return r.status === 0 && r.stdout.trim() === 'explainError,scanCompiled,scanSource,stripCode'; }],
   // Arguments
   ['no arguments: usage, exit 1', () => text([]).code === 1],
   ['unknown argument: exit 1', () => { const r = text(['--nope']); return r.code === 1 && r.err.includes('unknown argument'); }],

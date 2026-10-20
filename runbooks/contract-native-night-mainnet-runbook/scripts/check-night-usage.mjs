@@ -25,6 +25,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const RUNBOOK = 'https://github.com/midnightntwrk/servicedesk/blob/main/runbooks/contract-native-night-mainnet-runbook/contract-native-night-mainnet-runbook.md';
 const DUST_RUNBOOK = 'https://github.com/midnightntwrk/servicedesk/blob/main/runbooks/cnight-dust-duplicate-registration-runbook/cnight-dust-duplicate-registration-runbook.md';
@@ -59,23 +60,25 @@ const ON_MAINNET = {
 const NIGHT_HEX = '0'.repeat(64);
 
 // ---------- arguments ----------
-const argv = process.argv.slice(2);
-const opts = { json: false, paths: [] };
-for (let i = 0; i < argv.length; i++) {
-  const a = argv[i];
-  if (a === '--json') opts.json = true;
-  else if (a === '--error' || a === '--network') {
-    const v = argv[++i];
-    if (v === undefined) fail(`${a} needs a value\n${USAGE}`);
-    opts[a.slice(2)] = v;
-  } else if (a === '-h' || a === '--help') { console.log(USAGE); process.exit(0); }
-  else if (a.startsWith('--')) fail(`unknown argument ${a}\n${USAGE}`);
-  else opts.paths.push(a);
+function parseArgs(argv) {
+  const opts = { json: false, paths: [] };
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === '--json') opts.json = true;
+    else if (a === '--error' || a === '--network') {
+      const v = argv[++i];
+      if (v === undefined) fail(`${a} needs a value\n${USAGE}`);
+      opts[a.slice(2)] = v;
+    } else if (a === '-h' || a === '--help') { console.log(USAGE); process.exit(0); }
+    else if (a.startsWith('--')) fail(`unknown argument ${a}\n${USAGE}`);
+    else opts.paths.push(a);
+  }
+  if (opts.error === undefined && !opts.paths.length) fail(USAGE);
+  if (opts.error !== undefined && opts.paths.length) fail(`use either paths or --error\n${USAGE}`);
+  if (opts.network !== undefined && !['mainnet', 'preprod', 'preview', 'local', 'undeployed'].includes(opts.network)) fail(`--network: mainnet, preprod, preview or local\n${USAGE}`);
+  if (opts.network !== undefined && opts.error === undefined) fail(`--network goes with --error\n${USAGE}`);
+  return opts;
 }
-if (opts.error === undefined && !opts.paths.length) fail(USAGE);
-if (opts.error !== undefined && opts.paths.length) fail(`use either paths or --error\n${USAGE}`);
-if (opts.network !== undefined && !['mainnet', 'preprod', 'preview', 'local', 'undeployed'].includes(opts.network)) fail(`--network: mainnet, preprod, preview or local\n${USAGE}`);
-if (opts.network !== undefined && opts.error === undefined) fail(`--network goes with --error\n${USAGE}`);
 
 function fail(message) {
   console.error(message);
@@ -144,6 +147,12 @@ function callArgs(expr, name) {
 //   other   certainly another token (tokenType(...), mintUnshieldedToken(...))
 //   param   a parameter of the circuit: decided by what each caller passes
 //   unknown anything else: a ledger field, a witness, another value
+// Several possible token types for one name (const bound in different branches): NIGHT if any is.
+function combine(results) {
+  if (results.some((r) => r.status === 'night')) return { status: 'night' };
+  return results.find((r) => r.status !== 'other') ?? { status: 'other' };
+}
+
 function makeClassifier(lang, table) {
   const returns = new Map();
   function returnOf(key, local, depth) {
@@ -165,7 +174,7 @@ function makeClassifier(lang, table) {
     if (lang.night.test(e)) return { status: 'night' };
     if (lang.other.test(e)) return { status: 'other' };
     if (/^[A-Za-z_]\w*$/.test(e)) {
-      if (c.aliases.has(e)) return classify(c.aliases.get(e), c, depth + 1);
+      if (c.aliases.has(e)) return combine(c.aliases.get(e).map((x) => classify(x, c, depth + 1)));
       const i = c.params.indexOf(e);
       if (i >= 0) return { status: 'param', index: i, what: `parameter ${lang.label(e)}` };
       return { status: 'unknown', what: lang.describeName(e) };
@@ -173,9 +182,12 @@ function makeClassifier(lang, table) {
     // A field of a struct built in this circuit: const p = Payment { color: nativeToken(), ... }; p.color
     const field = /^([A-Za-z_]\w*)\.([A-Za-z_]\w*)$/.exec(e);
     if (field && c.aliases.has(field[1])) {
-      const lit = /^[A-Za-z_]\w*\s*(?:<[^>{]*>)?\s*\{(.*)\}$/.exec(c.aliases.get(field[1]).replace(/\s+/g, ' '));
-      const part = lit && splitTop(lit[1], true).find((p) => new RegExp(`^${field[2]}\\s*:`).test(p));
-      if (part) return classify(part.slice(part.indexOf(':') + 1), c, depth + 1);
+      const results = c.aliases.get(field[1]).map((x) => {
+        const lit = /^[A-Za-z_]\w*\s*(?:<[^>{]*>)?\s*\{(.*)\}$/.exec(x.replace(/\s+/g, ' '));
+        const part = lit && splitTop(lit[1], true).find((p) => new RegExp(`^${field[2]}\\s*:`).test(p));
+        return part && classify(part.slice(part.indexOf(':') + 1), c, depth + 1);
+      });
+      if (results.every(Boolean)) return combine(results);
     }
     const call = lang.call(e);
     if (call) {
@@ -283,8 +295,9 @@ function parseCompact(raw) {
   // import "file"; import Name; include "file"; with an optional prefix. Read from the raw text, since
   // stripping blanks the quoted path.
   const imports = [];
-  for (const x of raw.matchAll(/^[ \t]*(import|include)\s+(?:"([^"]+)"|([A-Za-z_]\w*))\s*(?:prefix\s+([A-Za-z_]\w*))?\s*;/gm)) {
-    if (src.slice(x.index, x.index + 6) !== raw.slice(x.index, x.index + 6)) continue; // inside a comment
+  for (const x of raw.matchAll(/^[ \t]*(import|include)\s+(?:"([^"]+)"|([A-Za-z_]\w*))\s*(?:<[^;]*>)?\s*(?:prefix\s+([A-Za-z_]\w*))?\s*;/gm)) {
+    const at = x.index + x[0].indexOf(x[1]);
+    if (src.slice(at, at + x[1].length) !== x[1]) continue; // inside a comment
     imports.push({ kind: x[1], spec: x[2] ?? x[3], quoted: x[2] !== undefined, prefix: x[4] ?? '', module: moduleAt(x.index) });
   }
   return { src, modules, circuits, exportLists, witnesses, ledger, imports };
@@ -319,7 +332,7 @@ export function scanSource(raw, file = '<source>') {
       const key = c.module ? `${c.module}::${c.name}` : c.name;
       const body = p.src.slice(c.open, c.end);
       const entry = { key, scope: c.module, params: c.params, aliases: new Map(), uses: [], calls: [], returns: [] };
-      for (const a of body.matchAll(/\bconst\s+([A-Za-z_]\w*)\s*(?::[^=;]+)?=\s*([^;]+);/g)) entry.aliases.set(a[1], a[2].trim());
+      for (const a of body.matchAll(/\bconst\s+([A-Za-z_]\w*)\s*(?::[^=;]+)?=\s*([^;]+);/g)) entry.aliases.set(a[1], [...(entry.aliases.get(a[1]) ?? []), a[2].trim()]);
       for (const r of body.matchAll(/\breturn\s+([^;]+);/g)) entry.returns.push(r[1].trim());
       for (const call of body.matchAll(/\b([A-Za-z_]\w*)\s*(?:<[^>(]*>)?\s*\(/g)) {
         const at = c.open + call.index + call[0].length - 1;
@@ -383,7 +396,8 @@ export function scanSource(raw, file = '<source>') {
 const COMPILED = {
   night: /^(?:this\._nativeToken_\d+\(\)|new Uint8Array\(32\)|new Uint8Array\(\[\s*0(?:\s*,\s*0){31}\s*\]\))$/,
   other: /^this\._(?:tokenType|mintUnshieldedToken)_\d+\(/,
-  unwrap: () => undefined,
+  // 0.34.0 and later compile circuits as async methods and await the calls.
+  unwrap: (e) => (/^await\s/.test(e) ? e.replace(/^await\s+/, '') : undefined),
   call: (e) => {
     const m = /^this\.(_[A-Za-z_]\w*?_\d+)\(/.exec(e);
     return m && closing(e, m[0].length - 1) === e.length - 1 ? { name: m[1] } : undefined;
@@ -404,7 +418,9 @@ export function scanCompiled(raw, file = '<index.js>') {
   if (start >= 0) {
     const open = src.indexOf('{', start);
     const block = src.slice(open, closing(src, open));
-    const keys = [...block.matchAll(/^\s{6}([A-Za-z_]\w*):\s*\(/gm)];
+    const keys = [...block.matchAll(/^\s{6}([A-Za-z_]\w*):\s*(?:async\s*)?\(/gm)];
+    // Entries there but none read: a compiler output shape this script doesn't know. Never an all-clear.
+    if (!keys.length && /^\s{6}[A-Za-z_]\w*\s*:/m.test(block)) fail(`${file}: couldn't read the circuits in this compiled output (a compiler version this checker doesn't know). Scan the .compact source instead.`);
     keys.forEach((k, i) => {
       const body = block.slice(k.index, i + 1 < keys.length ? keys[i + 1].index : block.length);
       const method = new RegExp(`this\\.(_${k[1]}_\\d+)\\(`).exec(body)?.[1];
@@ -413,7 +429,7 @@ export function scanCompiled(raw, file = '<index.js>') {
   }
   const table = new Map();
   const witnessMethods = new Set();
-  const re = /^ {2}(_[A-Za-z_]\w*?_\d+)\(([^)]*)\)\s*\{/gm;
+  const re = /^ {2}(?:async\s+)?(_[A-Za-z_]\w*?_\d+)\(([^)]*)\)\s*\{/gm;
   let m;
   while ((m = re.exec(src))) {
     const open = re.lastIndex - 1;
@@ -423,7 +439,7 @@ export function scanCompiled(raw, file = '<index.js>') {
     const entry = { key: m[1], params: m[2].split(',').map((p) => p.trim()).filter(Boolean), aliases: new Map(), uses: [], calls: [], returns: [] };
     for (const r of body.matchAll(/\breturn\s+([^;]+);/g)) entry.returns.push(r[1].trim());
     if (!STDLIB_JS.test(m[1])) {
-      for (const a of body.matchAll(/\bconst\s+([A-Za-z_]\w*)\s*=\s*([^;]+);/g)) entry.aliases.set(a[1], a[2].trim());
+      for (const a of body.matchAll(/\bconst\s+([A-Za-z_]\w*)\s*=\s*([^;]+);/g)) entry.aliases.set(a[1], [...(entry.aliases.get(a[1]) ?? []), a[2].trim()]);
       for (const call of body.matchAll(/this\.(_[A-Za-z_]\w*?_\d+)\(/g)) {
         const at = open + call.index + call[0].length - 1;
         const args = splitTop(src.slice(at + 1, closing(src, at)), false);
@@ -487,7 +503,7 @@ export function explainError(text, network) {
   }
   const insufficient = /InsufficientFunds|Insufficient funds/.test(t);
   // A stack from the shielded wallet (wallet-sdk-shielded/...): a shielded token, whatever its type.
-  if (insufficient && /wallet-sdk-shielded\//.test(t)) {
+  if (insufficient && /wallet-sdk-shielded\/|Insufficient funds for fallible segment/.test(t)) {
     return { verdict: null, summary: 'The shielded wallet is short of a shielded token, so this isn\'t the NIGHT problem (NIGHT is unshielded): the paying wallet needs more of that shielded token.' };
   }
   // JSON of err.cause carries the token type the wallet couldn't balance.
@@ -501,7 +517,8 @@ export function explainError(text, network) {
     if (testnet) return { verdict: null, summary: `On ${network} this isn't the Mainnet problem: a wallet is short of some token. If the circuit takes NIGHT, send tNIGHT to the paying wallet's unshielded address (the faucet does this). The tokenType in err.cause shows which token.` };
     return { verdict: 'maybe', summary: 'A wallet couldn\'t find enough of some token: NIGHT, a contract\'s own unshielded token, or a shielded token (the shielded wallet uses the same words). It is this runbook if the circuit takes NIGHT and this is Mainnet. To be sure, log JSON.stringify(err.cause, (_k, v) => typeof v === \'bigint\' ? v.toString() : v) and pass that to --error: a tokenType of 64 zeros is NIGHT.' };
   }
-  if (/Custom error:\s*194\b|BalanceCheckOutOfBounds/.test(t)) {
+  if (/Custom error:\s*194\b|Invalid\.BalanceCheckOutOfBounds/.test(t)) {
+    if (testnet) return { verdict: null, summary: `On ${network} this isn't the Mainnet problem: 194 (Invalid.BalanceCheckOutOfBounds) means the contract holds too little of the token the circuit sends, tNIGHT or its own. Nothing was charged.` };
     return { verdict: 'maybe', summary: 'The node rejected the transaction with 194 (Invalid.BalanceCheckOutOfBounds): a contract call pays out more of a token than the contract holds. Nothing was charged. It is this runbook if the circuit sends NIGHT (sendUnshielded with nativeToken()) and this is Mainnet: run this checker on the contract. If it sends a token the contract minted, the contract holds too little of that token.' };
   }
   if (/Custom error:\s*\d+/.test(t)) {
@@ -515,6 +532,7 @@ export function explainError(text, network) {
 
 // ---------- main ----------
 function main() {
+  const opts = parseArgs(process.argv.slice(2));
   if (opts.error !== undefined) {
     const text = opts.error === '-' ? fs.readFileSync(0, 'utf8') : opts.error;
     const r = explainError(text, opts.network);
@@ -568,4 +586,8 @@ function main() {
   process.exit(code);
 }
 
-main();
+// Run only as a command, so the exported functions can be imported.
+const invoked = (() => {
+  try { return fs.realpathSync(process.argv[1] ?? '') === fs.realpathSync(fileURLToPath(import.meta.url)); } catch { return false; }
+})();
+if (invoked) main();

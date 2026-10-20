@@ -212,7 +212,7 @@ works on Preprod fails on Mainnet.
 
 ## The checker's tests
 
-`test-check-night-usage.mjs`, 67 cases, offline, passing on Node 18.20.5, 20.19.1 and 24.20.0. The
+`test-check-night-usage.mjs`, 77 cases, offline, passing on Node 18.20.5, 20.19.1 and 24.20.0. The
 fixtures are:
 
 - the NIGHT parts of `token-transfers.compact` and `private-party.compact`;
