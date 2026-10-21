@@ -579,7 +579,7 @@ function main() {
     lines.push('', `On Mainnet (as of ${AS_OF}), a wallet funded through cNIGHT has DUST but no NIGHT on Midnight, and a contract no one has paid NIGHT holds none, so a circuit that moves NIGHT fails there. It works on Preview, Preprod and a local network:`);
     for (const k of kinds) lines.push(`  - a NIGHT ${k} ${ON_MAINNET[k]}`);
     if (!certain) lines.push('Each use above is NIGHT only if its token type is NIGHT\'s (32 zero bytes, what nativeToken() returns): check what the contract is deployed or called with.');
-    lines.push(`Fix: hide these circuits on Mainnet in the DApp, or leave them out of the Mainnet build (Mainnet deploys weren't landing as of ${AS_OF}: servicedesk#257). If a circuit only needs some token to move, a token the contract mints itself (mintUnshieldedToken) does move on Mainnet.`);
+    lines.push(`Fix: hide these circuits on Mainnet in the DApp, or leave them out of the Mainnet build. If a circuit only needs some token to move, a token the contract mints itself (mintUnshieldedToken) does move on Mainnet.`);
     lines.push(`Runbook: ${RUNBOOK}`);
   } else if (unfollowed) lines.push('', 'Exit 3: an import wasn\'t followed, so this isn\'t an all-clear.');
   console.log(lines.join('\n'));
