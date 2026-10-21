@@ -46,6 +46,8 @@ Symptoms overlap, so confirm the runbook's root cause before acting.
 | `1010: Invalid Transaction: Custom error:` (any N) | [Node rejection codes](node-1010-custom-error-runbook/node-1010-custom-error-runbook.md) |
 | `Transaction submission error` with no code in `err.message` (look for `RPC-CORE: submitAndWatchExtrinsic` on the console) | [Node rejection codes](node-1010-custom-error-runbook/node-1010-custom-error-runbook.md) |
 | `Transaction is invalid and was rejected by the node` | [Node rejection codes](node-1010-custom-error-runbook/node-1010-custom-error-runbook.md) |
+| `index_blocks_task failed: apply transactions` with `Intent TTL has expired` or `dust is outside of its validity window` (a self-hosted indexer exits at the same block on every restart) | [Sync halt](node-indexer-sync-halt-runbook/node-indexer-sync-halt-runbook.md) |
+| `Aborting the rest of the block execution` after `Intent TTL has expired` (a node syncing from genesis stops importing) | [Sync halt](node-indexer-sync-halt-runbook/node-indexer-sync-halt-runbook.md) (a DApp's own transaction rejected with `Custom error: 182`: [Node rejection codes](node-1010-custom-error-runbook/node-1010-custom-error-runbook.md)) |
 | `Wallet.InsufficientFunds: Insufficient funds` on Mainnet, with DUST in the wallet (`"tokenType":"0000…0000"`, 64 zeros, in `err.cause`) | [NIGHT on Mainnet](contract-native-night-mainnet-runbook/contract-native-night-mainnet-runbook.md) |
 | `Custom error: 194` (`Invalid.BalanceCheckOutOfBounds`) from a circuit that sends NIGHT (`sendUnshielded(nativeToken(), …)`) on Mainnet | [NIGHT on Mainnet](contract-native-night-mainnet-runbook/contract-native-night-mainnet-runbook.md) |
 | `Insufficient Funds: could not balance dust` (capital F: short of DUST for the fee, not NIGHT) | [cNIGHT→DUST duplicates](cnight-dust-duplicate-registration-runbook/cnight-dust-duplicate-registration-runbook.md) if DUST stopped generating; otherwise wait for DUST to generate |
@@ -53,6 +55,15 @@ Symptoms overlap, so confirm the runbook's root cause before acting.
 | `Failed to configure constructor context with coin public key` | [Toolchain mismatch](toolchain-version-mismatch-runbook/toolchain-version-mismatch-runbook.md) |
 | `expected instance of ContractMaintenanceAuthority` | [Toolchain mismatch](toolchain-version-mismatch-runbook/toolchain-version-mismatch-runbook.md) |
 | `does not provide an export named 'Clock'` | [Toolchain mismatch](toolchain-version-mismatch-runbook/toolchain-version-mismatch-runbook.md) |
+| `No matching version found for @midnight-ntwrk/` (from `npm install`) | [AI-written SDK code](sdk-ai-generated-code-errors-runbook/sdk-ai-generated-code-errors-runbook.md) |
+| `has no exported member` on a `@midnight-ntwrk/` import (from `tsc`) | [AI-written SDK code](sdk-ai-generated-code-errors-runbook/sdk-ai-generated-code-errors-runbook.md) |
+| `Cannot find module '@midnight-ntwrk/wallet'` (or `ledger-v7`, `ledger`, `zswap`) | [AI-written SDK code](sdk-ai-generated-code-errors-runbook/sdk-ai-generated-code-errors-runbook.md) |
+| `checkRuntimeVersion is not a function` | [AI-written SDK code](sdk-ai-generated-code-errors-runbook/sdk-ai-generated-code-errors-runbook.md) |
+| `unknown network ID` | [AI-written SDK code](sdk-ai-generated-code-errors-runbook/sdk-ai-generated-code-errors-runbook.md) |
+| `addIntent is not a function` | [AI-written SDK code](sdk-ai-generated-code-errors-runbook/sdk-ai-generated-code-errors-runbook.md) |
+| `pendingOutputs.values.map is not a function` | [AI-written SDK code](sdk-ai-generated-code-errors-runbook/sdk-ai-generated-code-errors-runbook.md) |
+| `setContractAddress is not a function` | [AI-written SDK code](sdk-ai-generated-code-errors-runbook/sdk-ai-generated-code-errors-runbook.md) |
+| `Property 'midnight' does not exist on type 'Window` | [AI-written SDK code](sdk-ai-generated-code-errors-runbook/sdk-ai-generated-code-errors-runbook.md) |
 | `unbound identifier` (from `compact compile`) | [Compact compile errors](compact-ai-generated-compile-errors-runbook/compact-ai-generated-compile-errors-runbook.md) |
 | `apparent use of an old standard-library / ledger operator name` | [Compact compile errors](compact-ai-generated-compile-errors-runbook/compact-ai-generated-compile-errors-runbook.md) |
 | `undefined for ledger field type` | [Compact compile errors](compact-ai-generated-compile-errors-runbook/compact-ai-generated-compile-errors-runbook.md) |
@@ -72,6 +83,10 @@ Symptoms overlap, so confirm the runbook's root cause before acting.
 | `ZkStdLibArch must enable jubjub` / `Unsupported test_eq: JubjubScalar` / `to an AssignedBounded less than 2^` / `cannot convert JubjubPoint to "Native"` | [zkir key generation](compact-zkir-keygen-failures-runbook/compact-zkir-keygen-failures-runbook.md) |
 | `Replicate Registrations Detected` | [cNIGHT→DUST duplicates](cnight-dust-duplicate-registration-runbook/cnight-dust-duplicate-registration-runbook.md) |
 | No error: `balanceUnboundTransaction` / `balanceTransaction` never returns, CPU-bound, RSS climbing | [Balancing hang](wallet-dust-balancing-hang-runbook/wallet-dust-balancing-hang-runbook.md) |
+| `Waiting to receive tokens...` for an hour or more on Preprod | [Preprod wallet sync](wallet-preprod-sync-runbook/wallet-preprod-sync-runbook.md) |
+| `Wallet synced state emission (synced=false)` with `dust=false`, for an hour on Preprod | [Preprod wallet sync](wallet-preprod-sync-runbook/wallet-preprod-sync-runbook.md) (with `unshielded=false` and `Wallet sync timeout after 90000ms`: [Blockfrost](indexer-blockfrost-migration-runbook/indexer-blockfrost-migration-runbook.md)) |
+| `Wallet.Sync: [object ErrorEvent]` | [Preprod wallet sync](wallet-preprod-sync-runbook/wallet-preprod-sync-runbook.md) |
+| `1000:: Normal Closure` from `subscribeRuntimeVersion()` while a wallet syncs (harmless) | [Preprod wallet sync](wallet-preprod-sync-runbook/wallet-preprod-sync-runbook.md) (at submission, with no code: [Node rejection codes](node-1010-custom-error-runbook/node-1010-custom-error-runbook.md)) |
 | `Provided address is invalid` (faucet) | [Test funds](wallet-test-funds-runbook/wallet-test-funds-runbook.md) |
 | `Your transaction is being submitted.` (faucet page that never finishes) | [Test funds](wallet-test-funds-runbook/wallet-test-funds-runbook.md) |
 | `You can't resubmit right now, next attempt is allowed at` (faucet) | [Test funds](wallet-test-funds-runbook/wallet-test-funds-runbook.md) |
