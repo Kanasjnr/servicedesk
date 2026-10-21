@@ -111,8 +111,9 @@ weren't run):
 - `Custom error: 194` from a circuit that sends a contract's own token: the contract holds too little
   of that token. It's the same check, on any network.
 - Any other `Custom error: N`: see [Node rejection codes](../node-1010-custom-error-runbook/node-1010-custom-error-runbook.md).
-- A Mainnet deploy that never lands: see
-  [midnightntwrk/servicedesk#257](https://github.com/midnightntwrk/servicedesk/issues/257).
+- A Mainnet deploy that sits pending until its TTL and is never included: a leftover deploy filter on
+  a node caused this until it was removed on 2026-10-20 ([midnightntwrk/servicedesk#257](https://github.com/midnightntwrk/servicedesk/issues/257)). If it
+  happens again, open a servicedesk issue with the transaction hash.
 
 ## Root cause
 
@@ -231,7 +232,7 @@ for a wallet that had NIGHT, and for a contract that held it.
    On Mainnet (as of 2026-10-19), a wallet funded through cNIGHT has DUST but no NIGHT on Midnight, and a contract no one has paid NIGHT holds none, so a circuit that moves NIGHT fails there. It works on Preview, Preprod and a local network:
      - a NIGHT receive fails in the wallet after proving, before anything is submitted: Wallet.InsufficientFunds: Insufficient funds. A wallet funded through cNIGHT has DUST but no NIGHT on Midnight to pay with.
      - a NIGHT send is rejected by the node after proving: 1010: Invalid Transaction: Custom error: 194 (BalanceCheckOutOfBounds), shown as SubmissionError: Transaction submission error. The contract holds no NIGHT.
-   Fix: hide these circuits on Mainnet in the DApp, or leave them out of the Mainnet build (Mainnet deploys weren't landing as of 2026-10-19: servicedesk#257). If a circuit only needs some token to move, a token the contract mints itself (mintUnshieldedToken) does move on Mainnet.
+   Fix: hide these circuits on Mainnet in the DApp, or leave them out of the Mainnet build. If a circuit only needs some token to move, a token the contract mints itself (mintUnshieldedToken) does move on Mainnet.
    Runbook: https://github.com/midnightntwrk/servicedesk/blob/main/runbooks/contract-native-night-mainnet-runbook/contract-native-night-mainnet-runbook.md
    ```
 
@@ -273,10 +274,8 @@ for a wallet that had NIGHT, and for a contract that held it.
    - Pro: no contract change.
    - Con: the feature is missing on Mainnet. Nothing published says whether a contract deployed now
      will work unchanged once NIGHT can be spent on Midnight Mainnet.
-3. **Leave them out of the Mainnet build.** First, the catch: new deploys weren't landing on Mainnet
-   as of 2026-10-19 ([midnightntwrk/servicedesk#257](https://github.com/midnightntwrk/servicedesk/issues/257)).
-   When they do, deploy a contract without the NIGHT circuits, and run the checker on its compiled
-   output first. Exit 0 means every unshielded call uses the contract's own token; review any
+3. **Leave them out of the Mainnet build.** Deploy a contract without the NIGHT circuits, and run the
+   checker on its compiled output first. Exit 0 means every unshielded call uses the contract's own token; review any
    "possible" line before deploying.
    - Pro: users can't reach a call that can only fail.
    - Con: it's a second contract to maintain.
@@ -286,7 +285,7 @@ for a wallet that had NIGHT, and for a contract that held it.
    `mintAndReceive` and `receiveTokens` show the pattern (not `silent-auction`'s `receiveTokens`, which
    takes NIGHT).
    - Con: it isn't NIGHT and carries none of its value, so it can't replace a real payment. Switching an
-     existing contract to it means a new deploy, with the same catch as option 3.
+     existing contract to it means a new deploy.
 5. **Before any Mainnet launch,** run the checker on every contract. Then call each NIGHT circuit once
    on a local network from a wallet that has DUST but no NIGHT, which is the Mainnet position. To get
    such a wallet, a funded wallet sends NIGHT to a third wallet, and that wallet registers it for DUST
