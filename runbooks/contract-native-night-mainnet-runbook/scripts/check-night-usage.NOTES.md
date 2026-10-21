@@ -24,7 +24,8 @@ there. What does each kind of circuit actually do, what does the developer see, 
 charged?
 
 Mainnet can't be used to test this: there is no NIGHT on Midnight to try the working case with, and new
-deploys weren't landing on Mainnet at the time ([midnightntwrk/servicedesk#257](https://github.com/midnightntwrk/servicedesk/issues/257)).
+deploys weren't landing on Mainnet at the time ([midnightntwrk/servicedesk#257](https://github.com/midnightntwrk/servicedesk/issues/257); fixed on
+2026-10-20).
 A local network can be set up the same way: a wallet with DUST and no NIGHT, and a contract that holds
 no NIGHT.
 
@@ -338,3 +339,10 @@ It found, and these are fixed:
   - a deploy caveat on the minted-token option;
   - the token-transfers docs page added to the follow-ups.
 
+
+## Updates
+
+- **2026-10-21: Mainnet deploys land again.** [midnightntwrk/servicedesk#257](https://github.com/midnightntwrk/servicedesk/issues/257) was fixed on
+  2026-10-20: a leftover deploy filter was removed from the affected nodes, and a test deploy was
+  included in block 3,097,000. The deploy caveat came off the page (option 3, option 4 and the
+  "Other errors" list) and off the checker's `Fix:` line. The NIGHT findings are unchanged.

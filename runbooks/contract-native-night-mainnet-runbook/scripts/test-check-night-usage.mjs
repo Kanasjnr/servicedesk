@@ -761,7 +761,7 @@ const cases = [
     const { out } = text([pp]);
     return out.includes('Wallet.InsufficientFunds: Insufficient funds') && out.includes('Custom error: 194') && out.includes('reads 0, because the contract holds none') && out.includes('checkIn: receive') && out.includes('2 move NIGHT');
   }],
-  ['text output links the runbook and #257', () => { const { out } = text([tt]); return out.includes('https://github.com/midnightntwrk/servicedesk/blob/main/runbooks/contract-native-night-mainnet-runbook/') && out.includes('servicedesk#257'); }],
+  ['text output links the runbook', () => text([tt]).out.includes('https://github.com/midnightntwrk/servicedesk/blob/main/runbooks/contract-native-night-mainnet-runbook/')],
   ['text output names the file of a use in an imported module', () => text([shop]).out.includes('line 4 of Pay.compact in Pay.takeNight')],
   // Errors
   ['error: JSON of err.cause with NIGHT\'s token type', () => { const { code, j } = json(['--error', ERR_RECEIVE_JSON]); return code === 2 && j.verdict === 'night' && j.tokenType === ZEROS; }],
