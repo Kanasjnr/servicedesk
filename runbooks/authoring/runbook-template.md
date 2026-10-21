@@ -128,12 +128,15 @@ One row per fact and source. The source cell holds one reference in backticks, a
 
   `github:<owner>/<repo>/<path>`   a file on the default branch of a public repo
   `npm:<package>/<path>`           a file in the package's latest published release
+  `npm:<package>@<version>/<path>` a file in that exact release
   `issue:<owner>/<repo>#<n>`       must contain `open` or `closed`
+
+Pin an npm row to a version when the fact is about the version that works with a network today: latest is often ahead of it, so an unpinned row can hold while the supported version says something else. Leave it unpinned when the reader installs latest and you want to hear when a release changes the fact.
 
 The text cannot contain a backtick. Write a pipe as \|. Use an issue row for "this fix has not shipped". A row with no such reference is not tested, so keep those for sources that need a login.
 -->
 
-Each row names a public source and text it must contain: a repo file (`github:`), a published package file (`npm:`), or an issue's state (`issue:`). [check-runbook.mjs](https://github.com/midnightntwrk/servicedesk/blob/main/runbooks/authoring/check-runbook.mjs) tests every row daily against each source's newest version. For your installed version, look under `node_modules/<package>/<path>`. If a source disagrees with a row, the source is right.
+Each row names a public source and text it must contain: a repo file (`github:`), a published package file (`npm:`), or an issue's state (`issue:`). [check-runbook.mjs](https://github.com/midnightntwrk/servicedesk/blob/main/runbooks/authoring/check-runbook.mjs) tests every row daily against each source's newest version, or the npm version a row pins. For your installed version, look under `node_modules/<package>/<path>`. If a source disagrees with a row, the source is right.
 
 | Fact this runbook relies on | Source of truth | Must contain |
 |---|---|---|

@@ -1,5 +1,5 @@
 ---
-title: "Moving to Blockfrost: what the docs migration guide does not cover"
+title: "Moving to Blockfrost, beyond the docs migration guide"
 when_to_use: "A preprod or mainnet app has moved from the Midnight-hosted indexer and RPC to Blockfrost and the fix in the docs migration guide was not enough: a wallet restored from saved state or a preseed bundle will not sync, or a funding step times out."
 audience: "developers support-agents"
 owner: "mn-servicedesk"

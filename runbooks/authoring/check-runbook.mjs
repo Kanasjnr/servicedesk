@@ -12,9 +12,10 @@
  * source that stopped matching, so a machine notices a stale runbook before a reader does.
  *
  * A row in Key identifiers:
- *   | <fact> | `github:<owner>/<repo>/<path>` | `<text>` `<more text>` |   file on the default branch
- *   | <fact> | `npm:<package>/<path>`         | `<text>` |                 file in the `latest` release
- *   | <fact> | `issue:<owner>/<repo>#<n>`     | `open` |                   or `closed`
+ *   | <fact> | `github:<owner>/<repo>/<path>`   | `<text>` `<more text>` |   file on the default branch
+ *   | <fact> | `npm:<package>/<path>`           | `<text>` |                 file in the `latest` release
+ *   | <fact> | `npm:<package>@<version>/<path>` | `<text>` |                 file in that exact release
+ *   | <fact> | `issue:<owner>/<repo>#<n>`       | `open` |                   or `closed`
  * The text is matched exactly and cannot contain a backtick. Write a pipe as \|. A row whose
  * source cell has no such reference is left to the reader and is not tested.
  *
@@ -83,7 +84,7 @@ const codeSpans = (cell) => [...(cell ?? '').matchAll(/`([^`]+)`/g)].map((m) => 
 const parseSource = (ref) => {
   let m;
   if ((m = ref.match(/^github:([\w.-]+\/[\w.-]+)\/(.+)$/))) return { type: 'github', repo: m[1], path: m[2] };
-  if ((m = ref.match(/^npm:((?:@[\w.-]+\/)?[\w.-]+)\/(.+)$/))) return { type: 'npm', package: m[1], path: m[2] };
+  if ((m = ref.match(/^npm:((?:@[\w.-]+\/)?[\w.-]+)(?:@([\w.+-]+))?\/(.+)$/))) return { type: 'npm', package: m[1], release: m[2] ?? 'latest', path: m[3] };
   if ((m = ref.match(/^issue:([\w.-]+\/[\w.-]+)#(\d+)$/))) return { type: 'issue', repo: m[1], number: Number(m[2]) };
   return null;
 };
@@ -322,13 +323,14 @@ const untar = (buf) => {
   return files;
 };
 
-const readNpmPackage = (pkg) => cached(`npm:${pkg}`, async () => {
-  const meta = await get(`${NPM_REGISTRY}/${pkg.replace('/', '%2F')}/latest`, { Accept: 'application/json' });
-  const bad = classify(meta, `${pkg}@latest`);
+// release is a dist-tag such as latest, or an exact version a row pins.
+const readNpmPackage = (pkg, release) => cached(`npm:${pkg}@${release}`, async () => {
+  const meta = await get(`${NPM_REGISTRY}/${pkg.replace('/', '%2F')}/${encodeURIComponent(release)}`, { Accept: 'application/json' });
+  const bad = classify(meta, `${pkg}@${release}`);
   if (bad) return bad;
   const manifest = await meta.json();
   const tarball = manifest?.dist?.tarball;
-  if (!tarball || !tarball.startsWith(`${NPM_REGISTRY}/`)) return { status: 'unknown', why: `${pkg}@latest: registry gave no tarball on ${NPM_REGISTRY}` };
+  if (!tarball || !tarball.startsWith(`${NPM_REGISTRY}/`)) return { status: 'unknown', why: `${pkg}@${release}: registry gave no tarball on ${NPM_REGISTRY}` };
   const res = await get(tarball);
   const badTar = classify(res, `${pkg}@${manifest.version} tarball`);
   if (badTar) return badTar;
@@ -339,8 +341,8 @@ const readNpmPackage = (pkg) => cached(`npm:${pkg}`, async () => {
   }
 });
 
-const readNpmFile = async ({ package: pkg, path: p }) => {
-  const got = await readNpmPackage(pkg);
+const readNpmFile = async ({ package: pkg, release, path: p }) => {
+  const got = await readNpmPackage(pkg, release);
   if (got.status !== 'ok') return got;
   const data = got.files.get(`package/${p}`);
   if (!data) return { status: 'gone', why: `${pkg}@${got.version} has no ${p}` };
@@ -351,7 +353,7 @@ const READERS = { github: readGithubFile, issue: readGithubIssue, npm: readNpmFi
 
 const sourceUrl = (s) => s.type === 'github' ? `https://github.com/${s.repo}/blob/HEAD/${s.path}`
   : s.type === 'issue' ? `https://github.com/${s.repo}/issues/${s.number}`
-  : `https://www.npmjs.com/package/${s.package}?activeTab=code`;
+  : `https://www.npmjs.com/package/${s.package}${s.release === 'latest' ? '' : `/v/${s.release}`}?activeTab=code`;
 
 // ---- facts -------------------------------------------------------------------------------
 

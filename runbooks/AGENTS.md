@@ -37,7 +37,7 @@ authoritative.
    addresses and identifiers in a runbook are point-in-time as of its compile date. Re-check
    anything you're about to state as fact against current source (`/verify`, octocode, the
    actual repo) — do not repeat a runbook claim you haven't re-grounded.
-   Where a runbook's Key identifiers table gives a check command for a value, run it.
+   If a runbook's Key identifiers table has a "Source of truth" column, re-check its facts with `node runbooks/authoring/check-runbook.mjs runbooks/<name>-runbook`. Older runbooks fail its structure checks, which says nothing about whether their facts hold.
 4. **Never take the user's keys or seed phrase.** Not "paste it here", not "just for this
    step". Any remediation that requires signing is **run by the user, locally, on their
    machine.** Hand them the script; the script reads secrets from a local file that never
