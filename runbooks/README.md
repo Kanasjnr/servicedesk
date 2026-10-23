@@ -85,6 +85,7 @@ Symptoms overlap, so confirm the runbook's root cause before acting.
 | `Replicate Registrations Detected` | [cNIGHT→DUST duplicates](cnight-dust-duplicate-registration-runbook/cnight-dust-duplicate-registration-runbook.md) |
 | `Registration Syncing` (cNgD DApp) | [DUST after registering cNIGHT](cnight-dust-after-registration-runbook/cnight-dust-after-registration-runbook.md) |
 | `NO REGISTRATION FOUND` (cNgD DApp, for a wallet that registered) | [DUST after registering cNIGHT](cnight-dust-after-registration-runbook/cnight-dust-after-registration-runbook.md) |
+| `No cNIGHT tokens found in wallet` (cNgD DApp) | [DUST after registering cNIGHT](cnight-dust-after-registration-runbook/cnight-dust-after-registration-runbook.md) |
 | `"registered": false` (indexer `dustGenerationStatus`) | [DUST after registering cNIGHT](cnight-dust-after-registration-runbook/cnight-dust-after-registration-runbook.md) |
 | No error: `balanceUnboundTransaction` / `balanceTransaction` never returns, CPU-bound, RSS climbing | [Balancing hang](wallet-dust-balancing-hang-runbook/wallet-dust-balancing-hang-runbook.md) |
 | `Waiting to receive tokens...` for an hour or more on Preprod | [Preprod wallet sync](wallet-preprod-sync-runbook/wallet-preprod-sync-runbook.md) |

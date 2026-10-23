@@ -25,7 +25,8 @@
  * Midnight project id for that network in your environment first. Never pass it as an argument. It is
  * sent only to Blockfrost and removed from everything this script prints.
  *
- * Exit code: 0 = registered once and generating DUST for the expected address,
+ * Exit code: 0 = registered once and generating DUST for the expected address (with --cardano-only:
+ *                registered once, and the key holds cNIGHT),
  *            2 = a finding (each FINDING line names the runbook step),
  *            1 = it could not run (bad arguments, missing project id, an endpoint unreachable).
  */
@@ -128,7 +129,8 @@ function convertBits(data, from, to, pad) {
     while (bits >= to) { bits -= to; out.push((acc >> bits) & max); }
   }
   if (pad && bits) out.push((acc << (to - bits)) & max);
-  else if (!pad && ((acc << (to - bits)) & max)) return undefined;
+  // Unpadding: five or more leftover bits, or any of them set, is not a valid encoding.
+  else if (!pad && (bits >= from || ((acc << (to - bits)) & max))) return undefined;
   return out;
 }
 // Returns { hrp, bytes, encoding } or undefined for anything that is not a well-formed address.
@@ -183,10 +185,10 @@ export function stakeKeyOf(addr) {
 // The DUST address the user expects: { payload } or { error }.
 export function dustAddressOf(addr, net) {
   const want = NETWORKS[net].dustHrp;
-  if (/^mn_addr|^mn_shield/i.test(addr)) return { error: `this is not a DUST address; the wallet's DUST address starts with ${want}1` };
+  if (/^mn_addr|^mn_shield/i.test(addr)) return { error: `the --dust address is not a DUST address; the wallet's DUST address starts with ${want}1` };
   const d = bech32Decode(addr);
-  if (!d || d.encoding !== 'bech32m') return { error: 'the DUST address checksum is wrong, so it was mistyped or cut short' };
-  if (d.hrp !== want) return { error: `this DUST address is for ${d.hrp.replace(/^mn_dust_?/, '') || 'mainnet'}, not ${net}` };
+  if (!d || d.encoding !== 'bech32m') return { error: 'the --dust address checksum is wrong, so it was mistyped or cut short' };
+  if (d.hrp !== want) return { error: `the --dust address is for ${d.hrp.replace(/^mn_dust_?/, '') || 'mainnet'}, not ${net}` };
   return { payload: hex(d.bytes) };
 }
 
@@ -423,7 +425,7 @@ async function main() {
   let expectDust;
   if (args.dust) {
     const d = dustAddressOf(args.dust, net);
-    if (d.error) { say(`DUST ADDRESS FINDING: ${d.error}.`); process.exit(2); }
+    if (d.error) { say(`ADDRESS FINDING: ${d.error}.`); process.exit(2); }
     expectDust = d.payload;
   }
   if (!args.cardanoOnly && NETWORKS[net].token && !TOKEN) fail(`${net} reads the Midnight indexer on Blockfrost: set BLOCKFROST_PROJECT_ID to a Midnight ${net} project id first, or add --cardano-only.`);

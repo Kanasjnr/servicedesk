@@ -44,9 +44,9 @@ const CASES = [
   ['a testnet address needs --network', [TESTNET], 'a testnet address works on Preprod and Preview', 1],
   ['an unknown network is a usage error', [MAINNET, '--network', 'devnet'], '--network is mainnet, preprod or preview', 1],
   ['an address split by a space in the shell is a usage error', [MAINNET.slice(0, 20), MAINNET.slice(20)], 'a second address part', 1],
-  ['a DUST address for another network is refused', [TESTNET, '--network', 'preprod', '--dust', MAINNET_DUST], 'DUST ADDRESS FINDING: this DUST address is for mainnet, not preprod', 2],
-  ['an unshielded address given as --dust is refused', [MAINNET, '--dust', 'mn_addr1ykuv8pkm79dqr98kn8arz7fg2fjrmjuf58cfzq6pxf2560mjdmxs5aw45s'], 'DUST ADDRESS FINDING: this is not a DUST address', 2],
-  ['a mistyped --dust is refused', [MAINNET, '--dust', `${MAINNET_DUST.slice(0, -1)}q`], 'DUST ADDRESS FINDING: the DUST address checksum is wrong', 2],
+  ['a DUST address for another network is refused', [TESTNET, '--network', 'preprod', '--dust', MAINNET_DUST], 'ADDRESS FINDING: the --dust address is for mainnet, not preprod', 2],
+  ['an unshielded address given as --dust is refused', [MAINNET, '--dust', 'mn_addr1ykuv8pkm79dqr98kn8arz7fg2fjrmjuf58cfzq6pxf2560mjdmxs5aw45s'], 'ADDRESS FINDING: the --dust address is not a DUST address', 2],
+  ['a mistyped --dust is refused', [MAINNET, '--dust', `${MAINNET_DUST.slice(0, -1)}q`], 'ADDRESS FINDING: the --dust address checksum is wrong', 2],
   ['Mainnet with no project id stops before any request', [MAINNET], 'mainnet reads the Midnight indexer on Blockfrost', 1, { BLOCKFROST_PROJECT_ID: '' }],
 ];
 
