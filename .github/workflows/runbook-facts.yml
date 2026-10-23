@@ -1,0 +1,127 @@
+name: Runbook facts check
+
+# Each runbook lists the facts it relies on in its Key identifiers table: a public source and the
+# text that must be in it. This job tests every row against its source and opens one issue per
+# source that stopped matching, so a machine notices a stale runbook before a reader does. It
+# reads public sources only and uses no secrets. See the header of
+# runbooks/authoring/check-runbook.mjs.
+
+on:
+  schedule:
+    - cron: '30 6 * * *'   # daily 06:30 UTC. One issue per changed source, so a daily run adds no noise.
+  workflow_dispatch: {}
+
+permissions:
+  issues: write
+  contents: read
+
+concurrency:
+  group: runbook-facts
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3  # v9.0.0
+        env:
+          # Read-only use: raises the api.github.com rate limit for the public files the check reads.
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const { spawnSync } = require('child_process');
+            const { owner, repo } = context.repo;
+
+            const RUNBOOKS_DIR = 'runbooks';
+            const CHECKER = path.join(RUNBOOKS_DIR, 'authoring', 'check-runbook.mjs');
+
+            if (!fs.existsSync(CHECKER)) {
+              core.notice(`${CHECKER} not found — nothing to check`);
+              return;
+            }
+
+            // Exit codes: 0 every row holds, 2 at least one changed, 1 could not run or some
+            // source could not be read. JSON is printed in all but the "could not run" case.
+            const run = spawnSync('node', [CHECKER, '--all', RUNBOOKS_DIR, '--json'], { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
+            let report;
+            try {
+              report = JSON.parse(run.stdout);
+            } catch {
+              core.setFailed(`check-runbook.mjs did not produce a report (exit ${run.status}): ${run.stderr.trim()}`);
+              return;
+            }
+
+            const parseOwner = (dir) => {
+              const file = path.join(RUNBOOKS_DIR, dir, `${dir}.md`);
+              if (!fs.existsSync(file)) return null;
+              const m = fs.readFileSync(file, 'utf8').match(/^owner:\s*["']?([^"'\n]+)["']?/m);
+              return m ? m[1].trim() : null;
+            };
+
+            const open = await github.paginate(github.rest.issues.listForRepo, {
+              owner, repo, state: 'open', per_page: 100,
+            });
+
+            for (const rb of report.runbooks) {
+              const runbookOwner = parseOwner(rb.runbook);
+
+              for (const r of rb.results.filter(r => r.status === 'unknown')) {
+                core.warning(`${rb.runbook} / ${r.source}: could not be read — ${r.detail}`);
+              }
+
+              // Rows are grouped by source, because one change to a file can break several rows.
+              const changed = new Map();
+              for (const r of rb.results.filter(r => r.status === 'changed')) {
+                changed.set(r.source, [...(changed.get(r.source) ?? []), r]);
+              }
+
+              for (const [source, rows] of changed) {
+                // The title is the dedup key, as in template-staleness.yml: one open issue per
+                // runbook and source, however many days the source stays changed.
+                const title = `chore: runbook fact changed — ${rb.runbook} / ${source}`;
+                if (open.some(i => i.title === title)) {
+                  core.notice(`Skipping ${rb.runbook} / ${source} — tracking issue already exists`);
+                  continue;
+                }
+
+                // Everything in the body comes from this repo's runbook or from the checker's
+                // own wording. Nothing fetched from a source is copied in.
+                const body = [
+                  `**A fact this runbook relies on no longer matches its source of truth**: \`${RUNBOOKS_DIR}/${rb.runbook}\``,
+                  ``,
+                  `| Field | Value |`,
+                  `|-------|-------|`,
+                  `| Source | [\`${source}\`](${rows[0].url})${rows[0].version ? ` (read ${rows[0].version})` : ''} |`,
+                  `| Runbook owner | ${runbookOwner ?? '_not set_'} |`,
+                  `| Checked at | ${report.checked_at} |`,
+                  ``,
+                  `**What the check found**`,
+                  ``,
+                  ...rows.map(r => `- Key identifiers row ${r.row}, "${r.fact}": ${r.detail}`),
+                  ``,
+                  `**What to do**`,
+                  ``,
+                  `Read the source, then re-read the runbook steps that rely on these rows. Fix the steps if the fact changed, or the row if only the wording moved. Say what was wrong in the commit message, and close this issue. To re-run the check:`,
+                  ``,
+                  '```sh',
+                  `node ${CHECKER} ${RUNBOOKS_DIR}/${rb.runbook}`,
+                  '```',
+                ].join('\n');
+
+                await github.rest.issues.create({
+                  owner, repo,
+                  title,
+                  body,
+                  labels: ['status:untriaged'],
+                });
+
+                core.notice(`Opened fact issue for ${rb.runbook} / ${source}`);
+              }
+            }
+
+            const s = report.summary;
+            core.notice(`Facts check complete — ${s.holds} hold, ${s.changed} changed, ${s.unknown} unknown`);
