@@ -394,10 +394,10 @@ Expect 1.2.0, 4.2.0 and 1.2.3. Anything else: install `@midnight-ntwrk/wallet-sd
   the uncapped retry backoff, the silent end of a cleanly completed subscription, and the latched
   `isConnected`. Fixed in the wallet SDK 2.0 line; drop Remediation 5 once 2.x is in the support
   matrix.
-- **A stream that goes quiet on an open socket** (not filed): seen only through Blockfrost, and
-  it isn't known yet whether the wallet, graphql-ws or the indexer is behind it. Worth a
-  [midnight-wallet#743](https://github.com/midnightntwrk/midnight-wallet/issues/743) comment or its
-  own issue once someone reproduces it against another indexer, and a check on wallet SDK 2.x.
+- **A stream that goes quiet on an open socket:**
+  [servicedesk#251](https://github.com/midnightntwrk/servicedesk/issues/251) (open), with a relay
+  that reproduces it. Seen only through Blockfrost, and it isn't known yet whether the wallet,
+  graphql-ws or the indexer is behind it. Wallet SDK 2.x hasn't been checked against the relay.
 - **[midnight-wallet#639](https://github.com/midnightntwrk/midnight-wallet/issues/639)** (open,
   blocked until Ledger 9): the saved DUST state keeps growing.
 - **[midnight-wallet#288](https://github.com/midnightntwrk/midnight-wallet/issues/288)** (done in
