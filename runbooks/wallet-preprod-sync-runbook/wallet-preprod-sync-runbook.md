@@ -351,8 +351,35 @@ Expect 1.2.0, 4.2.0 and 1.2.3. Anything else: install `@midnight-ntwrk/wallet-sd
    minutes at most. For a long first sync, keep the machine awake: `caffeinate -i <command>` on
    macOS, `systemd-inhibit <command>` on Linux.
 
-   *Trade-off:* a restart without saved state starts the replay over. Restarting only the wallet
-   inside a running app (`wallet.stop()`, then restore and start) wasn't tested here.
+   To restart without stopping the app, rebuild the wallet from its saved state. Calling
+   `wallet.stop()` and then `wallet.start()` on the same facade is not enough: in a test with the
+   [servicedesk#251](https://github.com/midnightntwrk/servicedesk/issues/251) relay it returned at
+   once but never resubscribed, and DUST stayed where it had stopped. Rebuilding resubscribed within
+   2 seconds and DUST synced on, in both runs (**measured**):
+
+   ```ts
+   // shielded, unshielded, dust and wallet are `let`s, built as in Remediation 2.
+   const restart = async () => {
+     const saved = {
+       shielded: await shielded.serializeState(),
+       unshielded: await unshielded.serializeState(),
+       dust: await dust.serializeState(),
+     };
+     await wallet.stop();
+     shielded = ShieldedWallet(config).restore(saved.shielded);
+     unshielded = UnshieldedWallet(config).restore(saved.unshielded);
+     dust = DustWallet(dustConfig).restore(saved.dust);
+     wallet = await WalletFacade.init({ configuration: config, shielded: () => shielded, unshielded: () => unshielded, dust: () => dust });
+     await wallet.start(zswapSecretKeys, dustSecretKey);
+     // Move anything subscribed to the old facade's state() over to the new one.
+   };
+   ```
+
+   Call it when DUST's `appliedIndex` is below `highestRelevantWalletIndex` and hasn't moved for a
+   few minutes. On Blockfrost a quiet stream often clears within two minutes, when Blockfrost drops
+   the socket, so waiting a little first avoids restarts that weren't needed.
+
+   *Trade-off:* a restart without saved state starts the replay over.
 6. **Discard state that doesn't match the indexer.** If the checker FAILs a state file, or the log
    repeats `values inserted non-linearly…`, delete the saved state and sync from the start once.
    For a brand-new wallet, a fresh snapshot is the faster alternative.
@@ -367,10 +394,10 @@ Expect 1.2.0, 4.2.0 and 1.2.3. Anything else: install `@midnight-ntwrk/wallet-sd
   the uncapped retry backoff, the silent end of a cleanly completed subscription, and the latched
   `isConnected`. Fixed in the wallet SDK 2.0 line; drop Remediation 5 once 2.x is in the support
   matrix.
-- **A stream that goes quiet on an open socket** (not filed): seen only through Blockfrost, and
-  it isn't known yet whether the wallet, graphql-ws or the indexer is behind it. Worth a
-  [midnight-wallet#743](https://github.com/midnightntwrk/midnight-wallet/issues/743) comment or its
-  own issue once someone reproduces it against another indexer, and a check on wallet SDK 2.x.
+- **A stream that goes quiet on an open socket:**
+  [servicedesk#251](https://github.com/midnightntwrk/servicedesk/issues/251) (open), with a relay
+  that reproduces it. Seen only through Blockfrost, and it isn't known yet whether the wallet,
+  graphql-ws or the indexer is behind it. Wallet SDK 2.x hasn't been checked against the relay.
 - **[midnight-wallet#639](https://github.com/midnightntwrk/midnight-wallet/issues/639)** (open,
   blocked until Ledger 9): the saved DUST state keeps growing.
 - **[midnight-wallet#288](https://github.com/midnightntwrk/midnight-wallet/issues/288)** (done in
