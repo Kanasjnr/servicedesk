@@ -1,5 +1,5 @@
 {
- "source": "Koios and the Midnight indexer (Blockfrost on Mainnet and Preprod, the public Preview indexer), read by gatherFacts() in check-dust-registration.mjs on 2026-10-22. On Mainnet, stake keys, transaction hashes and DUST addresses are replaced by stand-ins, the same one for each real value, so the cases keep their shape without naming anyone. BigInts are strings ending in n.",
+ "source": "Koios and the Midnight indexer (Blockfrost on Mainnet and Preprod, the public Preview indexer), read by gatherFacts() in check-dust-registration.mjs on 2026-10-22, and on 2026-10-26 for uncountedNight and sharedAddress. For the 2026-10-22 cases, cnight.old and shared were added on 2026-10-26 from each key's Cardano history at the time it was recorded. On Mainnet, stake keys, transaction hashes and DUST addresses are replaced by stand-ins, the same one for each real value, so the cases keep their shape without naming anyone. BigInts are strings ending in n.",
  "cases": {
   "removed": {
    "net": "mainnet",
@@ -9,7 +9,8 @@
    "others": [],
    "cnight": {
     "total": "0n",
-    "recent": "0n"
+    "recent": "0n",
+    "old": "0n"
    },
    "history": {
     "events": [
@@ -73,7 +74,8 @@
    "others": [],
    "cnight": {
     "total": "10000000000n",
-    "recent": "10000000000n"
+    "recent": "10000000000n",
+    "old": "0n"
    },
    "history": {
     "events": [
@@ -116,7 +118,8 @@
    "others": [],
    "cnight": {
     "total": "26599744800n",
-    "recent": "13803173600n"
+    "recent": "13803173600n",
+    "old": "0n"
    },
    "history": {
     "events": [
@@ -153,7 +156,13 @@
      }
     ]
    },
-   "midnightSkipped": false
+   "midnightSkipped": false,
+   "shared": {
+    "keys": 0,
+    "total": "0n",
+    "recent": "0n",
+    "old": "0n"
+   }
   },
   "dappShort": {
    "net": "mainnet",
@@ -170,7 +179,8 @@
    "others": [],
    "cnight": {
     "total": "796298573429n",
-    "recent": "0n"
+    "recent": "0n",
+    "old": "796298573429n"
    },
    "history": {
     "events": [
@@ -214,7 +224,13 @@
      }
     ]
    },
-   "midnightSkipped": false
+   "midnightSkipped": false,
+   "shared": {
+    "keys": 0,
+    "total": "0n",
+    "recent": "0n",
+    "old": "0n"
+   }
   },
   "duplicates": {
    "net": "mainnet",
@@ -261,7 +277,8 @@
    "others": [],
    "cnight": {
     "total": "1314814460n",
-    "recent": "0n"
+    "recent": "0n",
+    "old": "1314814460n"
    },
    "history": {
     "events": [
@@ -346,7 +363,8 @@
    "others": [],
    "cnight": {
     "total": "0n",
-    "recent": "0n"
+    "recent": "0n",
+    "old": "0n"
    },
    "history": {
     "events": [],
@@ -379,7 +397,8 @@
    ],
    "cnight": {
     "total": "0n",
-    "recent": "0n"
+    "recent": "0n",
+    "old": "0n"
    },
    "history": {
     "events": [],
@@ -414,7 +433,8 @@
    "others": [],
    "cnight": {
     "total": "1000n",
-    "recent": "0n"
+    "recent": "0n",
+    "old": "1000n"
    },
    "history": {
     "events": [
@@ -451,7 +471,13 @@
      }
     ]
    },
-   "midnightSkipped": false
+   "midnightSkipped": false,
+   "shared": {
+    "keys": 0,
+    "total": "0n",
+    "recent": "0n",
+    "old": "0n"
+   }
   },
   "noNight": {
    "net": "preview",
@@ -468,7 +494,8 @@
    "others": [],
    "cnight": {
     "total": "0n",
-    "recent": "0n"
+    "recent": "0n",
+    "old": "0n"
    },
    "history": {
     "events": [
@@ -505,7 +532,13 @@
      }
     ]
    },
-   "midnightSkipped": false
+   "midnightSkipped": false,
+   "shared": {
+    "keys": 0,
+    "total": "0n",
+    "recent": "0n",
+    "old": "0n"
+   }
   },
   "previewGenerating": {
    "net": "preview",
@@ -522,7 +555,8 @@
    "others": [],
    "cnight": {
     "total": "1000000000n",
-    "recent": "0n"
+    "recent": "0n",
+    "old": "1000000000n"
    },
    "history": {
     "events": [
@@ -559,7 +593,163 @@
      }
     ]
    },
-   "midnightSkipped": false
+   "midnightSkipped": false,
+   "shared": {
+    "keys": 0,
+    "total": "0n",
+    "recent": "0n",
+    "old": "0n"
+   }
+  },
+  "uncountedNight": {
+   "net": "preview",
+   "stake": "stake_test1uraqwvewc5pp5vc4el8zsh69ztll4ltwunzmejaq8g754tgdh53th",
+   "now": 1793013911,
+   "live": [
+    {
+     "tx": "9539bc5bb53b6fb270cdedfc6316d6032ffa1f1ec0eb9004dc47f01d26c9dc54",
+     "ix": 0,
+     "time": 1792739113,
+     "dust": "7328f9de74c2c87c7ed816bbcf410075ef8f4ccf19b819dba10f7a7e07915a2f3b"
+    }
+   ],
+   "others": [],
+   "cnight": {
+    "total": "1000000100n",
+    "recent": "100n",
+    "old": "1000000000n"
+   },
+   "history": {
+    "events": [
+     {
+      "type": "registered",
+      "ref": "84692c3354692c89bd2f05d56ae6f4d185bdbe44ef13ffa85fa86a0e85e344b0#0",
+      "tx": "84692c3354692c89bd2f05d56ae6f4d185bdbe44ef13ffa85fa86a0e85e344b0",
+      "time": 1792582382,
+      "dust": "736303bdde512a109fdea395e4c7a7816be7d44aed9546c27e9f12925b257fbe71"
+     },
+     {
+      "type": "removed",
+      "ref": "84692c3354692c89bd2f05d56ae6f4d185bdbe44ef13ffa85fa86a0e85e344b0#0",
+      "tx": "9539bc5bb53b6fb270cdedfc6316d6032ffa1f1ec0eb9004dc47f01d26c9dc54",
+      "time": 1792739113,
+      "dust": "736303bdde512a109fdea395e4c7a7816be7d44aed9546c27e9f12925b257fbe71"
+     },
+     {
+      "type": "registered",
+      "ref": "9539bc5bb53b6fb270cdedfc6316d6032ffa1f1ec0eb9004dc47f01d26c9dc54#0",
+      "tx": "9539bc5bb53b6fb270cdedfc6316d6032ffa1f1ec0eb9004dc47f01d26c9dc54",
+      "time": 1792739113,
+      "dust": "7328f9de74c2c87c7ed816bbcf410075ef8f4ccf19b819dba10f7a7e07915a2f3b"
+     },
+     {
+      "type": "registered",
+      "ref": "00c5354b9d2a8fc847ccef887e992b2623ad9b62b42ac862446092146c978d7d#0",
+      "tx": "00c5354b9d2a8fc847ccef887e992b2623ad9b62b42ac862446092146c978d7d",
+      "time": 1792739153,
+      "dust": "7328f9de74c2c87c7ed816bbcf410075ef8f4ccf19b819dba10f7a7e07915a2f3b"
+     },
+     {
+      "type": "removed",
+      "ref": "00c5354b9d2a8fc847ccef887e992b2623ad9b62b42ac862446092146c978d7d#0",
+      "tx": "91d3632b206ff88200211e3104b753ca1d8836555e0c8fad41ea49e700a60e8b",
+      "time": 1792739244,
+      "dust": "7328f9de74c2c87c7ed816bbcf410075ef8f4ccf19b819dba10f7a7e07915a2f3b"
+     }
+    ],
+    "read": 7
+   },
+   "midnight": {
+    "status": {
+     "registered": true,
+     "dustAddress": "mn_dust_preview1wv50nhn5cty8clkcz6au7sgqwhhc7nx0rxupnkappaa8upu3tghnkzehrn2",
+     "nightBalance": "10000",
+     "generationRate": "82670000",
+     "currentCapacity": "50000000000000",
+     "utxoTxHash": null,
+     "utxoOutputIndex": null
+    },
+    "registrations": [
+     {
+      "dustAddress": "mn_dust_preview1wv50nhn5cty8clkcz6au7sgqwhhc7nx0rxupnkappaa8upu3tghnkzehrn2",
+      "valid": true,
+      "nightBalance": "118950",
+      "generationRate": "983359650",
+      "maxCapacity": "594750000000000",
+      "currentCapacity": "594750000000000",
+      "utxoTxHash": null,
+      "utxoOutputIndex": null
+     }
+    ]
+   },
+   "midnightSkipped": false,
+   "shared": {
+    "keys": 2,
+    "total": "1000118950n",
+    "recent": "0n",
+    "old": "1000118950n"
+   }
+  },
+  "sharedAddress": {
+   "net": "mainnet",
+   "stake": "stake1u8qy0es3fkjerag8aepsuzr90tpwaad0ucl8swnl5q5sqgsje5dd5",
+   "now": 1793013952,
+   "live": [
+    {
+     "tx": "bcb84da3d6a8f0ea0c0f521545807362c0e430fb401f9615ab37ca6549854c3e",
+     "ix": 0,
+     "time": 1792934389,
+     "dust": "090f17cd60ed72a3c4c7e4206b0214215bec560a18d594fdc711cb6d7cf76c5409"
+    }
+   ],
+   "others": [],
+   "cnight": {
+    "total": "588108503n",
+    "recent": "0n",
+    "old": "0n"
+   },
+   "history": {
+    "events": [
+     {
+      "type": "registered",
+      "ref": "bcb84da3d6a8f0ea0c0f521545807362c0e430fb401f9615ab37ca6549854c3e#0",
+      "tx": "bcb84da3d6a8f0ea0c0f521545807362c0e430fb401f9615ab37ca6549854c3e",
+      "time": 1792934389,
+      "dust": "090f17cd60ed72a3c4c7e4206b0214215bec560a18d594fdc711cb6d7cf76c5409"
+     }
+    ],
+    "read": 6
+   },
+   "midnight": {
+    "status": {
+     "registered": true,
+     "dustAddress": "mn_dust1py830ntqa4e283x8ussxkqs5y9d7c4s2rr2eflw8z89k6l8hd32qjy2wzme",
+     "nightBalance": "588108503",
+     "generationRate": "4861892994301",
+     "currentCapacity": "386953201523422289",
+     "utxoTxHash": "bcb84da3d6a8f0ea0c0f521545807362c0e430fb401f9615ab37ca6549854c3e",
+     "utxoOutputIndex": 0
+    },
+    "registrations": [
+     {
+      "dustAddress": "mn_dust1py830ntqa4e283x8ussxkqs5y9d7c4s2rr2eflw8z89k6l8hd32qjy2wzme",
+      "valid": true,
+      "nightBalance": "5014252185",
+      "generationRate": "41452822813395",
+      "maxCapacity": "25071260925000000000",
+      "currentCapacity": "3329733473611282759",
+      "utxoTxHash": "bcb84da3d6a8f0ea0c0f521545807362c0e430fb401f9615ab37ca6549854c3e",
+      "utxoOutputIndex": 0
+     }
+    ]
+   },
+   "midnightSkipped": false,
+   "shared": {
+    "keys": 2,
+    "total": "4722427251n",
+    "recent": "0n",
+    "old": "296283569n"
+   }
   }
  }
 }

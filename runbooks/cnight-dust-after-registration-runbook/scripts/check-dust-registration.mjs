@@ -9,6 +9,8 @@
  *   3. How much cNIGHT does the key hold on Cardano?
  *   4. Has Midnight picked the registration up, which DUST address does it generate for, and how
  *      much NIGHT does it count? (The network's Midnight indexer.)
+ *   5. Do other stake keys register the same DUST address? Midnight counts NIGHT per DUST address,
+ *      so their cNIGHT is part of the figure it is compared with.
  *
  * It needs the public stake address (stake1..., stake_test1...) or a Cardano address that carries the
  * stake key (addr1q..., addr_test1q...). It never needs a seed, and it signs nothing.
@@ -73,7 +75,7 @@ const NETWORKS = {
 };
 // The registration datum: Constr0[ Constr0[ bytes28 stake key hash ], bytes dust_address ].
 const DATUM_PREFIX = 'd8799fd8799f581c';
-// Past 24 hours with no sign on Midnight, escalate.
+// Past 24 hours, a registration Midnight hasn't seen is escalated, and cNIGHT it doesn't count is a finding.
 const ESCALATE_HOURS = 24;
 // The newest transactions read for the history; a busy key has thousands.
 const HISTORY_TXS = 100;
@@ -156,6 +158,8 @@ export function bech32Encode(hrp, bytes, encoding = 'bech32') {
   return `${hrp}1${[...data, ...chk].map((d) => CHARSET[d]).join('')}`;
 }
 const hex = (bytes) => Buffer.from(bytes).toString('hex');
+const stakeAddressOf = (net, credential) => bech32Encode(NETWORKS[net].stakeHrp, Buffer.from(`${net === 'mainnet' ? 'e1' : 'e0'}${credential}`, 'hex'));
+const dustAddressFor = (net, payload) => bech32Encode(NETWORKS[net].dustHrp, Buffer.from(payload, 'hex'), 'bech32m');
 
 // The stake key in a Cardano address: { mainnet, credential } or { error }.
 export function stakeKeyOf(addr) {
@@ -219,28 +223,52 @@ function parseDatum(bytes) {
   return { credential, dust };
 }
 
-// The live registrations for the key at the validator, filtered by the datum's stake key.
-async function liveRegistrations(net, credential) {
-  const filter = encodeURIComponent('inline_datum->>bytes').replace(/%2D/g, '-') + `=like.${DATUM_PREFIX}${credential}%2A`;
+// The live registrations at the validator whose datum matches a Koios "like" pattern (* is %2A).
+async function registrationsLike(net, pattern) {
+  const filter = `${encodeURIComponent('inline_datum->>bytes')}=like.${pattern}`;
   const rows = await koiosPost(net, `/address_utxos?${filter}`, { _addresses: [NETWORKS[net].validator], _extended: true });
   return rows.map((u) => ({ u, d: parseDatum(u.inline_datum?.bytes) }))
-    .filter(({ d }) => d?.credential === credential)
-    .map(({ u, d }) => ({ tx: u.tx_hash, ix: u.tx_index, time: u.block_time, dust: d.dust }))
+    .filter(({ d }) => d)
+    .map(({ u, d }) => ({ tx: u.tx_hash, ix: u.tx_index, time: u.block_time, credential: d.credential, dust: d.dust }))
     .sort((a, b) => a.time - b.time);
 }
 
-// The cNIGHT at addresses with this stake key: all of it, and the part that arrived in the last
-// waitHours, which Midnight does not count yet.
-async function cnightHeld(net, stake, now) {
-  const rows = await koiosPost(net, '/account_utxos', { _stake_addresses: [stake], _extended: true });
+// The live registrations for the key, filtered by the datum's stake key.
+async function liveRegistrations(net, credential) {
+  return (await registrationsLike(net, `${DATUM_PREFIX}${credential}%2A`))
+    .filter((r) => r.credential === credential)
+    .map(({ credential: _c, ...r }) => r);
+}
+
+// The cNIGHT at addresses with these stake keys: all of it, the part that arrived in the last waitHours,
+// which Midnight does not count yet, and the part held longer than ESCALATE_HOURS, which it must count.
+async function cnightHeld(net, stakes, now) {
+  const rows = await koiosPost(net, '/account_utxos', { _stake_addresses: stakes, _extended: true });
   const { policy, name } = NETWORKS[net].cnight;
-  let total = 0n, recent = 0n;
+  let total = 0n, recent = 0n, old = 0n;
   for (const u of rows) {
     const q = (u.asset_list ?? []).filter((a) => a.policy_id === policy && (a.asset_name ?? '') === name).reduce((n, a) => n + BigInt(a.quantity), 0n);
     total += q;
     if (now - u.block_time < NETWORKS[net].waitHours * 3600) recent += q;
+    if (now - u.block_time > ESCALATE_HOURS * 3600) old += q;
   }
-  return { total, recent };
+  return { total, recent, old };
+}
+
+// Both indexer queries select by DUST address, so every key registered to the same address shares the
+// MIDNIGHT figures. The other keys Midnight counts for this address (registered once, to it), and the
+// cNIGHT they hold.
+async function sharedKeys(net, dust, credential, now) {
+  const credentials = [...new Set((await registrationsLike(net, `%2A${dust}%2A`))
+    .filter((r) => r.dust === dust && r.credential !== credential).map((r) => r.credential))];
+  const counted = [];
+  // The indexer takes at most ten reward addresses a query.
+  for (let i = 0; i < credentials.length; i += 10) {
+    const data = await indexer(net, `query($a: [CardanoRewardAddress!]!) {
+      dustGenerationStatus(cardanoRewardAddresses: $a) { cardanoRewardAddress registered dustAddress } }`, { a: credentials.slice(i, i + 10).map((c) => stakeAddressOf(net, c)) });
+    for (const s of data.dustGenerationStatus) if (s.registered && s.dustAddress === dustAddressFor(net, dust)) counted.push(s.cardanoRewardAddress);
+  }
+  return { keys: counted.length, ...(counted.length ? await cnightHeld(net, counted, now) : { total: 0n, recent: 0n, old: 0n }) };
 }
 
 // Registrations made and removed in the key's newest transactions.
@@ -269,15 +297,12 @@ async function history(net, stake, credential) {
   return { events, read: newest.length };
 }
 
-async function midnightState(net, stake) {
+async function indexer(net, query, variables) {
   const n = NETWORKS[net];
-  const query = `query($a: [CardanoRewardAddress!]!) {
-    dustGenerationStatus(cardanoRewardAddresses: $a) { registered dustAddress nightBalance generationRate currentCapacity utxoTxHash utxoOutputIndex }
-    dustGenerations(cardanoRewardAddresses: $a) { registrations { dustAddress valid nightBalance generationRate maxCapacity currentCapacity utxoTxHash utxoOutputIndex } } }`;
   const r = await fetch(n.indexer, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...(n.token ? { project_id: TOKEN } : {}) },
-    body: JSON.stringify({ query, variables: { a: [stake] } }),
+    body: JSON.stringify({ query, variables }),
     signal: AbortSignal.timeout(TIMEOUT_MS),
   });
   const text = await r.text();
@@ -286,7 +311,14 @@ async function midnightState(net, stake) {
   if (r.status === 403 || r.status === 401) throw new Error(`the ${net} indexer refused the project id (HTTP ${r.status}): is BLOCKFROST_PROJECT_ID a Midnight ${net} project?`);
   if (r.status !== 200 || !body) throw new Error(`the ${net} indexer answered HTTP ${r.status}: ${text.slice(0, 200)}`);
   if (body.errors) throw new Error(`the ${net} indexer answered: ${body.errors[0].message}`);
-  return { status: body.data.dustGenerationStatus[0], registrations: body.data.dustGenerations[0]?.registrations ?? [] };
+  return body.data;
+}
+
+async function midnightState(net, stake) {
+  const data = await indexer(net, `query($a: [CardanoRewardAddress!]!) {
+    dustGenerationStatus(cardanoRewardAddresses: $a) { registered dustAddress nightBalance generationRate currentCapacity utxoTxHash utxoOutputIndex }
+    dustGenerations(cardanoRewardAddresses: $a) { registrations { dustAddress valid nightBalance generationRate maxCapacity currentCapacity utxoTxHash utxoOutputIndex } } }`, { a: [stake] });
+  return { status: data.dustGenerationStatus[0], registrations: data.dustGenerations[0]?.registrations ?? [] };
 }
 
 const night = (stars) => {
@@ -304,12 +336,12 @@ const when = (secs) => new Date(secs * 1000).toISOString().replace(/\.\d{3}Z$/, 
 const hours = (h) => (h < 48 ? `${h.toFixed(1)} h` : `${(h / 24).toFixed(1)} days`);
 
 // The report for the facts gathered, and the exit code it gives. Exported so the test can feed it
-// recorded answers. facts: { net, stake, now, live, history?, cnight?, others, midnight?, expectDust? }
+// recorded answers. facts: { net, stake, now, live, history?, cnight?, others, midnight?, shared?, expectDust? }
 export function report(facts) {
   const { net, now, live } = facts;
   const n = NETWORKS[net];
   const WAIT_HOURS = n.waitHours;
-  const dustBech = (payload) => (payload ? bech32Encode(n.dustHrp, Buffer.from(payload, 'hex'), 'bech32m') : 'none');
+  const dustBech = (payload) => (payload ? dustAddressFor(net, payload) : 'none');
   const lines = [];
   const ageH = (t) => (now - t) / 3600;
 
@@ -323,6 +355,8 @@ export function report(facts) {
     if (facts.history.read >= HISTORY_TXS) lines.push(`HISTORY read only the ${HISTORY_TXS} newest transactions that touch this stake key`);
   }
   if (facts.cnight) lines.push(`NIGHT ${night(facts.cnight.total)} (cNIGHT) held by this stake key on Cardano${facts.cnight.recent ? `, ${night(facts.cnight.recent)} of it received in the last ${WAIT_HOURS} hours` : ''}`);
+  const shared = facts.shared?.keys ? facts.shared : undefined;
+  if (shared) lines.push(`SHARED ${shared.keys} other stake key(s) that Midnight counts for this DUST address hold ${night(shared.total)} (cNIGHT)${shared.recent ? `, ${night(shared.recent)} of it received in the last ${WAIT_HOURS} hours` : ''}. Midnight counts NIGHT per DUST address, so the MIDNIGHT figures include theirs.`);
   for (const o of facts.others) lines.push(`OTHER NETWORK ${o.count} live registration(s) for the same key on Cardano ${o.net}`);
 
   const m = facts.midnight;
@@ -373,13 +407,23 @@ export function report(facts) {
   const generating = m.registrations.filter((r) => r.valid && r.dustAddress === m.status.dustAddress).reduce((s, r) => s + BigInt(r.nightBalance), 0n);
   const held = facts.cnight;
   if (held?.total === 0n) return finding('NIGHT FINDING: registered, but this stake key holds no cNIGHT on Cardano, so there is nothing to generate DUST from. Remediation 3.');
-  if (generating === 0n) {
-    if (held && held.recent === held.total) return finding(`WAIT FINDING: registered, but all ${night(held.total)} the key holds arrived in the last ${WAIT_HOURS} hours, and Midnight does not count it yet. Check again after ${WAIT_HOURS} hours. Diagnose 1.`);
-    return finding(`ESCALATE FINDING: registered, but Midnight counts no NIGHT generating DUST for it${held ? `, although the key has held ${night(held.total - held.recent)} for more than ${WAIT_HOURS} hours` : ''}. Open a servicedesk issue with this output. Diagnose 1.`);
-  }
-  if (held && generating < held.total) {
-    if (generating >= held.total - held.recent) lines.push(`NIGHT note: Midnight counts ${night(generating)} of the ${night(held.total)} the key holds. The ${night(held.recent)} received in the last ${WAIT_HOURS} hours is not counted yet.`);
-    else lines.push(`NIGHT note: Midnight counts ${night(generating)}, less than the ${night(held.total - held.recent)} the key has held for more than ${WAIT_HOURS} hours. If it is still short tomorrow, open a servicedesk issue with this output.`);
+  if (held) {
+    // Midnight's figure is for the DUST address, so compare it with the cNIGHT of every key it counts there.
+    const all = shared ? { total: held.total + shared.total, recent: held.recent + shared.recent, old: held.old + shared.old } : held;
+    const [who, holds, has] = shared ? [`the ${shared.keys + 1} keys registered to this DUST address`, 'hold', 'have'] : ['the key', 'holds', 'has'];
+    const late = all.total - all.recent;
+    if (generating === 0n && late === 0n) return finding(`WAIT FINDING: registered, but all ${night(all.total)} ${who} ${holds} arrived in the last ${WAIT_HOURS} hours, and Midnight does not count it yet. Check again after ${WAIT_HOURS} hours. Diagnose 1.`);
+    // A cNIGHT UTXO generates DUST only if Midnight saw it created while its key had exactly one
+    // registration (Root cause 5), so cNIGHT held this long and still not counted has to move again.
+    if (generating < all.old) {
+      const whose = !shared || generating < held.old ? 'some of this key\'s cNIGHT' : 'cNIGHT under one of those keys';
+      return finding(`NIGHT FINDING: registered, but Midnight counts ${generating ? `only ${night(generating)}` : 'no NIGHT'} for this DUST address, although ${who} ${has} held ${night(all.old)} for more than ${ESCALATE_HOURS} hours. Midnight never counts a cNIGHT UTXO created before the registration or in a transaction that changed it, so ${whose} has to move again. Root cause 5, then Remediation 3.`);
+    }
+    if (generating === 0n) return finding(`WAIT FINDING: registered, but Midnight counts none of the ${night(late)} ${who} ${has} held for more than ${WAIT_HOURS} hours, which is later than usual. Run this again tomorrow, and do not register again. Diagnose 1.`);
+    if (generating < all.total) {
+      if (generating >= late) lines.push(`NIGHT note: Midnight counts ${night(generating)} of the ${night(all.total)} ${who} ${holds}. The ${night(all.recent)} received in the last ${WAIT_HOURS} hours is not counted yet.`);
+      else lines.push(`NIGHT note: Midnight counts ${night(generating)}, less than the ${night(late)} ${who} ${has} held for more than ${WAIT_HOURS} hours, which is later than usual. Run this again tomorrow: past ${ESCALATE_HOURS} hours it is a NIGHT FINDING.`);
+    }
   }
   // The DApp's Generation Rate, and its DUST Balance with no Midnight wallet connected, come from
   // dustGenerationStatus, which reads only the newest generating UTXO for the DUST address.
@@ -402,12 +446,15 @@ export async function gatherFacts({ net, credential, stake, expectDust, cardanoO
       if (found.length) others.push({ net: other, count: found.length });
     } catch { /* another network's answer is only a hint */ }
   }
+  const cnight = await cnightHeld(net, [stake], now);
+  const midnight = cardanoOnly ? undefined : await midnightState(net, stake);
   return {
-    net, stake, now, live, others, expectDust,
-    cnight: await cnightHeld(net, stake, now),
+    net, stake, now, live, others, expectDust, cnight,
     history: await history(net, stake, credential),
-    midnight: cardanoOnly ? undefined : await midnightState(net, stake),
+    midnight,
     midnightSkipped: Boolean(cardanoOnly),
+    // Only one registration, read on Midnight, is compared with the cNIGHT held.
+    shared: midnight?.status.registered && live.length === 1 && live[0].dust ? await sharedKeys(net, live[0].dust, credential, now) : undefined,
   };
 }
 
@@ -420,7 +467,7 @@ async function main() {
   if (!key.mainnet && net === 'mainnet') { say('ADDRESS FINDING: this is a testnet address. Use --network preprod or --network preview.'); process.exit(2); }
   if (key.mainnet) net = 'mainnet';
   else if (!net) fail('a testnet address works on Preprod and Preview: add --network preprod or --network preview');
-  const stake = bech32Encode(NETWORKS[net].stakeHrp, Buffer.from(`${key.mainnet ? 'e1' : 'e0'}${key.credential}`, 'hex'));
+  const stake = stakeAddressOf(net, key.credential);
   say(`ADDRESS ok: stake key ${key.credential} on ${net} (${stake})`);
   let expectDust;
   if (args.dust) {
