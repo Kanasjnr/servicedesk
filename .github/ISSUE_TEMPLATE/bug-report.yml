@@ -131,7 +131,10 @@ body:
     id: logs
     attributes:
       label: Logs and Error Messages
-      description: Please paste any relevant logs, error messages, or stack traces
+      description: >-
+        Please paste any relevant logs, error messages, or stack traces.
+        Remove seed phrases, private keys, Blockfrost project ids and contract secrets first, because issues are public.
+        Lines that print a node or indexer URL can contain the project id.
       placeholder: |
         Paste logs here. For Rust code, include RUST_BACKTRACE=1 output.
         For TypeScript, include full stack traces.

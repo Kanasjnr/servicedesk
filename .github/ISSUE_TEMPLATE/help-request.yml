@@ -88,7 +88,10 @@ body:
     id: logs
     attributes:
       label: Relevant Logs or Code Snippets
-      description: Please paste any relevant logs, console output, or the specific code snippet causing trouble.
+      description: >-
+        Please paste any relevant logs, console output, or the specific code snippet causing trouble.
+        Remove seed phrases, private keys, Blockfrost project ids and contract secrets first, because issues are public.
+        Lines that print a node or indexer URL can contain the project id.
       render: shell
     validations:
       required: false
