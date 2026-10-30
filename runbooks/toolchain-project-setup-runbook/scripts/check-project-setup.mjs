@@ -5,17 +5,18 @@
  * It answers, for one project folder (the current folder unless you name one):
  *   1. Is there a package.json here, and is it valid JSON? If there is none, which folders below have one?
  *   2. With --script, is that script here, or only in a workspace?
- *   3. Does the Node running this match the project's engines field and .nvmrc?
+ *   3. Does the Node running this match the project's engines field and .nvmrc, and npm its devEngines?
  *   4. On WSL, are node, npm and npx the Linux ones, or Windows' from /mnt/c?
- *   5. If the project uses Yarn, is yarn on PATH, and can `corepack enable` write its shims?
+ *   5. If the project uses Yarn, is yarn on PATH, is it Corepack's when the project pins Yarn 2 or newer,
+ *      and can `corepack enable` write its shims?
  *   6. Can `npm install -g` write to npm's global folder without root?
  *   7. Does a workspace depend on a local package under a name that differs only in case?
  *   8. Is the project's GitHub repo, or the template it was made from, archived? Did create-mn-app make it?
  *   9. Does the project still configure midnight-mcp?
  *  10. How much disk space is free?
  *
- * It reads the project's files, runs `npm config get prefix`, and asks the GitHub API whether the repo
- * is archived (no token needed; --offline skips it). It installs nothing, changes nothing and signs nothing.
+ * It reads the project's files, runs `npm --version` and `npm config get prefix` (not on Windows), and asks the GitHub API
+ * whether the repo is archived (no token needed; --offline skips it). It installs nothing, changes nothing and signs nothing.
  *
  * Requirements: Node >= 18.15. No npm install. Run it with the same `node` you run npm with.
  *
@@ -199,7 +200,32 @@ function usesYarn(dir) {
   }
 }
 
-const depsOf = (pkg) =>({ ...pkg.dependencies, ...pkg.devDependencies, ...pkg.peerDependencies, ...pkg.optionalDependencies });
+// The Yarn the nearest packageManager field pins, and whether that folder's .yarnrc.yml sets yarnPath to a
+// checked-in release, which any yarn on PATH hands over to.
+function yarnPin(dir) {
+  for (let d = dir; ; d = path.dirname(d)) {
+    const pm = readJson(path.join(d, 'package.json'))?.json?.packageManager;
+    if (pm) {
+      let yarnrc = '';
+      try { yarnrc = fs.readFileSync(path.join(d, '.yarnrc.yml'), 'utf8'); } catch { /* none */ }
+      const m = /^yarn@(\d+)/.exec(String(pm));
+      return m ? { version: String(pm).replace(/^yarn@/, '').replace(/\+.*/, ''), major: Number(m[1]), yarnPath: /^yarnPath:/m.test(yarnrc) } : undefined;
+    }
+    if (fs.existsSync(path.join(d, '.git')) || path.dirname(d) === d) return undefined;
+  }
+}
+
+// The npm range the nearest devEngines field names, at or above the folder: a workspace inherits the root's.
+function npmWanted(dir) {
+  for (let d = dir; ; d = path.dirname(d)) {
+    const pm = readJson(path.join(d, 'package.json'))?.json?.devEngines?.packageManager;
+    const npm = [pm].flat().find((e) => e?.name === 'npm' && e.version);
+    if (npm) return npm.version;
+    if (fs.existsSync(path.join(d, '.git')) || path.dirname(d) === d) return undefined;
+  }
+}
+
+const depsOf = (pkg) => ({ ...pkg.dependencies, ...pkg.devDependencies, ...pkg.peerDependencies, ...pkg.optionalDependencies });
 
 // --- the machine ------------------------------------------------------------------------------
 
@@ -213,13 +239,14 @@ export const realSystem = {
   procVersion: () => { try { return fs.readFileSync('/proc/version', 'utf8'); } catch { return ''; } },
   isExecutable: (p) => { try { fs.accessSync(p, fs.constants.X_OK); return fs.statSync(p).isFile(); } catch { return false; } },
   exists: (p) => fs.existsSync(p),
+  realpath: (p) => { try { return fs.realpathSync(p); } catch { return p; } },
   // Can this user create files in p? For a folder that does not exist yet, the nearest one that does.
   writable: (p) => {
     let d = p;
     while (!fs.existsSync(d) && path.dirname(d) !== d) d = path.dirname(d);
     try { fs.accessSync(d, fs.constants.W_OK); return true; } catch { return false; }
   },
-  run: (cmd, args) => spawnSync(cmd, args, { encoding: 'utf8', timeout: 20_000, shell: process.platform === 'win32' }),
+  run: (cmd, args) => spawnSync(cmd, args, { encoding: 'utf8', timeout: 20_000 }),
   freeBytes: (dir) => { const s = fs.statfsSync(dir); return s.bavail * s.bsize; },
   fetch: (...a) => fetch(...a),
 };
@@ -315,8 +342,13 @@ export function report(f) {
     }
   }
 
+  if (f.npmWanted && f.npmVersion && satisfies(f.npmVersion, f.npmWanted) === false) finding(`NPM FINDING: this project wants npm ${f.npmWanted} (package.json devEngines) and npm here is ${f.npmVersion}. Remediation 3.`);
+
   if (f.usesYarn) {
-    if (f.tools.yarn) lines.push(`YARN ok at ${f.tools.yarn}`);
+    const pin = f.yarnPin;
+    // A global Yarn 1 refuses a project that pins Yarn 2 or newer; Corepack's shim runs the pinned one.
+    if (f.tools.yarn && pin?.major >= 2 && !pin.yarnPath && f.yarnViaCorepack === false) finding(`YARN FINDING: yarn at ${f.tools.yarn} is a global install, not Corepack's, and this project pins yarn@${pin.version}, so yarn stops with "However the current global version of Yarn is …". Remediation 5.`);
+    else if (f.tools.yarn) lines.push(`YARN ok at ${f.tools.yarn}`);
     else if (!f.tools.corepack) finding('YARN FINDING: the project runs with yarn, and neither yarn nor corepack is on PATH. Remediation 5.');
     else if (!f.corepackWritable) finding(`YARN FINDING: yarn is not on PATH, and corepack enable would fail with EACCES: it writes next to ${f.tools.corepack}, which this user can't write. Remediation 5.`);
     else finding('YARN FINDING: yarn is not on PATH. Run corepack enable once, then open a new shell: Remediation 5.');
@@ -340,6 +372,7 @@ export function report(f) {
   }
 
   if (findings.length) lines.push(`RESULT ${findings.length} finding(s). Fix the first, then run this again.`);
+  else if (f.globalDir && !f.globalWritable) lines.push('RESULT no finding in this project, but the GLOBAL NOTE explains EACCES from npm install -g or corepack enable: Remediation 5. Anything else: Diagnose 2.');
   else lines.push('RESULT nothing here explains an npm, yarn or Node failure. Diagnose 2.');
   return { lines, code: findings.length ? 2 : 0 };
 }
@@ -369,6 +402,8 @@ export async function gatherFacts({ dir, script, offline }, sys = realSystem) {
       if (path.dirname(d) === d) break;
     }
     facts.usesYarn = usesYarn(dir);
+    facts.yarnPin = yarnPin(dir);
+    facts.npmWanted = npmWanted(dir);
     facts.workspaces = workspaceDirs(dir, pkg).map((d) => {
       const w = readJson(path.join(d, 'package.json'))?.json ?? {};
       return { dir: d, name: w.name ?? path.basename(d), scripts: w.scripts ?? {}, deps: depsOf(w) };
@@ -389,8 +424,13 @@ export async function gatherFacts({ dir, script, offline }, sys = realSystem) {
   }
 
   if (tools.corepack) facts.corepackWritable = sys.writable(path.dirname(tools.corepack));
-  // Windows' npm under WSL would answer for Windows, so it is not asked.
-  if (tools.npm && !(wsl && tools.npm.startsWith('/mnt/'))) {
+  // Corepack's yarn shim resolves into corepack/dist/yarn.js. Windows' .cmd shims don't resolve, so it isn't judged there.
+  if (tools.yarn && sys.platform !== 'win32') facts.yarnViaCorepack = /[\\/]corepack[\\/]/.test(sys.realpath(tools.yarn));
+  // Windows' npm under WSL would answer for Windows, so it is not asked. Nor is npm on Windows: there it is a
+  // .cmd file, which only runs through a shell, and a root-owned global folder is a Unix problem.
+  if (tools.npm && sys.platform !== 'win32' && !(wsl && tools.npm.startsWith('/mnt/'))) {
+    const v = sys.run(tools.npm, ['--version']);
+    if (v.status === 0 && v.stdout.trim()) facts.npmVersion = v.stdout.trim();
     const r = sys.run(tools.npm, ['config', 'get', 'prefix']);
     const prefix = r.status === 0 ? r.stdout.trim() : '';
     if (prefix) {
