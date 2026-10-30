@@ -109,9 +109,11 @@ Triage shortcut: search the issue body or logs for these exact strings (a grep i
 | `Defaulting to Windows directory` | [npm, yarn or Node fail while setting up a Midnight project](toolchain-project-setup-runbook/toolchain-project-setup-runbook.md) |
 | `EPERM: operation not permitted` | [npm, yarn or Node fail while setting up a Midnight project](toolchain-project-setup-runbook/toolchain-project-setup-runbook.md) |
 | `EBADENGINE` | [npm, yarn or Node fail while setting up a Midnight project](toolchain-project-setup-runbook/toolchain-project-setup-runbook.md) |
+| `EBADDEVENGINES` | [npm, yarn or Node fail while setting up a Midnight project](toolchain-project-setup-runbook/toolchain-project-setup-runbook.md) |
 | `EACCES: permission denied` | [npm, yarn or Node fail while setting up a Midnight project](toolchain-project-setup-runbook/toolchain-project-setup-runbook.md) |
 | `command not found: yarn` | [npm, yarn or Node fail while setting up a Midnight project](toolchain-project-setup-runbook/toolchain-project-setup-runbook.md) |
 | `yarn: command not found` | [npm, yarn or Node fail while setting up a Midnight project](toolchain-project-setup-runbook/toolchain-project-setup-runbook.md) |
+| `However the current global version of Yarn is` | [npm, yarn or Node fail while setting up a Midnight project](toolchain-project-setup-runbook/toolchain-project-setup-runbook.md) |
 | `Command 'nvm' not found` | [npm, yarn or Node fail while setting up a Midnight project](toolchain-project-setup-runbook/toolchain-project-setup-runbook.md) |
 | `failed to resolve` | [npm, yarn or Node fail while setting up a Midnight project](toolchain-project-setup-runbook/toolchain-project-setup-runbook.md) |
 | `EJSONPARSE` | [npm, yarn or Node fail while setting up a Midnight project](toolchain-project-setup-runbook/toolchain-project-setup-runbook.md) |
